@@ -55,6 +55,7 @@ require (
 )
 
 //replace github.com/sagernet/sing => ../sing
+replace github.com/sagernet/sing-tun v0.6.6-0.20250428031943-0686f8c4f210 => ../sing-tun
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
