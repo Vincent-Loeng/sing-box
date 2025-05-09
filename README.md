@@ -7,9 +7,9 @@ This self-use fork provides executable files for `386, amd64, arm, and arm64`
 
 ## Known issues 已知问题
 
-Due to the limitaion of FreeBSD route api, traffic Loops may happen when using `auto_route`, please refer to the given examples
+Due to the limitaion of FreeBSD route api, traffic Loops may happen when using `realip`, please refer to the given examples
 
-由于 FreeBSD route api 的限制，使用`auto_route`时可能触发环路，请参考以下示例
+由于 FreeBSD route api 的限制，使用`realip`时可能触发环路，请参考以下示例
 
 
 ## Examples 示例
