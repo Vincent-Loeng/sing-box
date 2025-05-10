@@ -137,7 +137,8 @@ Please refer to the following template to avoid traffic loops
   
 ```
 
-### 2. FIB (without automatic routing)
+
+### 2. FIB
 
 ```bash
 ## 1. add the follwing parameters to /etc/sysctl.conf and reboot
@@ -145,27 +146,11 @@ Please refer to the following template to avoid traffic loops
 net.fibs=2
 net.add_addr_allfibs=1
 
-## 2. add routing rules manually
-## 2、手动添加路由规则
-setfib 1 route add default <gateway>
-setfib 1 route add -inet6 default <gateway6>
+## 2. add gateways manually, or add `static_routes` to /etc/rc.conf
+## 2、手动添加路由规则，或者添加`static_routes`到/etc/rc.conf
+setfib 1 route add default <default_gateway>
+setfib 1 route add -inet6 default <default_gateway6>
 setfib 1 <path>/sing-box -c <path>/config.json run
-route add -net 1.0.0.0/8 <tun_gateway>
-route add -net 2.0.0.0/7 <tun_gateway>
-route add -net 4.0.0.0/6 <tun_gateway>
-route add -net 8.0.0.0/5 <tun_gateway>
-route add -net 16.0.0.0/4 <tun_gateway>
-route add -net 32.0.0.0/3 <tun_gateway>
-route add -net 64.0.0.0/2 <tun_gateway>
-route add -net 128.0.0.0/1 <tun_gateway>
-route add -net 198.18.0.0/15 <tun_gateway6>
-route add -net -inet6 100::/8 <tun_gateway6>
-route add -net -inet6 200::/7 <tun_gateway6>
-route add -net -inet6 400::/6 <tun_gateway6>
-route add -net -inet6 1000::/4 <tun_gateway6>
-route add -net -inet6 2000::/3 <tun_gateway6>
-route add -net -inet6 4000::/2 <tun_gateway6>
-route add -net -inet6 8000::/1 <tun_gateway6>
 ```
 
 
