@@ -18,7 +18,7 @@ import (
 	"github.com/sagernet/sing-box/experimental/libbox/platform"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/json/badoption"
@@ -164,6 +164,10 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 	if ruleIndex == 0 {
 		ruleIndex = tun.DefaultIPRoute2RuleIndex
 	}
+	fibIndex := options.FIBIndex
+	if fibIndex == 0 {
+		fibIndex = tun.DefaultFIBIndex
+	}
 	inputMark := uint32(options.AutoRedirectInputMark)
 	if inputMark == 0 {
 		inputMark = tun.DefaultAutoRedirectInputMark
@@ -188,6 +192,7 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 			AutoRoute:                options.AutoRoute,
 			IPRoute2TableIndex:       tableIndex,
 			IPRoute2RuleIndex:        ruleIndex,
+			FIBIndex:                 fibIndex,
 			AutoRedirectInputMark:    inputMark,
 			AutoRedirectOutputMark:   outputMark,
 			StrictRoute:              options.StrictRoute,
