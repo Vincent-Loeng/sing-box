@@ -2,30 +2,26 @@
 
 This self-use fork provides executable files for `386, amd64, arm, and arm64`
 
-自用分支，提供`386、amd64、arm、arm64`等架构的可执行文件
+自用分支，提供`386、amd64、arm和arm64`等架构的可执行文件
 
 
 ## Known issues 已知问题
 
-Traffic Loops may happen when using `realip`, please refer to one of the given examples
-
-使用`realip`时可能触发环路，请参考给出的示例之一
+None
 
 
 ## TO-DO 待做事项
 
-- Automatically set up routing table
+- (**Done**) Automatically set up routing table
 - `auto_redirect`
 
 
 
 ## Examples 示例
 
-### 1. FakeIP
+Please refer to the following template 
 
-Please refer to the following template to avoid traffic loops 
-
-请参考提供的模板，以避免环路问题
+请参考提供的模板
 
 ```json
 {
@@ -39,17 +35,11 @@ Please refer to the following template to avoid traffic loops
         "fdfe:dcba:9876::0/126"
       ],
       "mtu": 9000,
+      "fib_index": 2022, // new options 新增选项
       "auto_route": true,
       "strict_route": true,
       "endpoint_independent_nat": false,
-      "stack": "system",
-      "route_address": [
-        // FakeIP range
-        "198.18.0.0/15",
-        "fc00::/18"
-        // address list that need to be proxied
-        // 可在此处添加需要代理的IP地址
-      ]
+      "stack": "system"
     }
   ],
   "outbounds": [
@@ -120,12 +110,6 @@ Please refer to the following template to avoid traffic loops
     "rules": [
       {
         "action": "route",
-        "invert": true,
-        "rule_set": [],
-        "server": "local-dns"
-      },
-      {
-        "action": "route",
         "query_type": [
           "A",
           "AAAA"
@@ -142,22 +126,6 @@ Please refer to the following template to avoid traffic loops
   }
 }
   
-```
-
-
-### 2. FIB
-
-```bash
-## 1. add the follwing parameters to /etc/sysctl.conf and reboot
-## 1、添加以下参数到/etc/sysctl.conf并重启
-net.fibs=2
-net.add_addr_allfibs=1
-
-## 2. add gateways manually, or add `static_routes` to /etc/rc.conf
-## 2、手动添加网关，或者添加`static_routes`到/etc/rc.conf
-setfib 1 route add default <default_gateway>
-setfib 1 route add -inet6 default <default_gateway6>
-setfib 1 <path>/sing-box -c <path>/config.json run
 ```
 
 
