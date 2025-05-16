@@ -4,7 +4,7 @@ This self-use fork provides executable files for `386, amd64, arm, and arm64`
 
 自用分支，提供`386、amd64、arm和arm64`等架构的可执行文件
 
-This repo will not update the version frequently, please modify and compile yourself if you need new version
+This repo will not update the version frequently, please modify and compile it yourself if you need new version
 
 此仓库不会经常更新版本，如若需要新版本，请自行修改编译
 
@@ -16,8 +16,8 @@ None
 
 ## TO-DO 待做事项
 
-- (**Done**) Automatically set up routing table
-- `auto_redirect`
+- ~~(**Done**) Automatically set up routing table~~
+- (**It depends on my time**) `auto_redirect`
 
 
 
