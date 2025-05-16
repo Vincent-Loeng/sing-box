@@ -4,9 +4,9 @@ This self-use fork provides executable files for `386, amd64, arm, and arm64`
 
 自用分支，提供`386、amd64、arm和arm64`等架构的可执行文件
 
-This repo will not be updated frequently due to few modification, please add it if necessary 
+This repo will not be updated frequently due to few modifications, please modify and compile yourself if necessary
 
-由于修改很少，此仓库不会经常更新，如若需要，请手动添加
+由于修改很少，此仓库不会经常更新，如若需要，请自行修改编译
 
 
 ## Known issues 已知问题
