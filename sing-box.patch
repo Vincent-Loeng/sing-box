@@ -1,0 +1,44 @@
+diff --git a/option/tun.go b/option/tun.go
+index 9263dd16..48bebf65 100644
+--- a/option/tun.go
++++ b/option/tun.go
+@@ -17,6 +17,7 @@ type TunInboundOptions struct {
+ 	AutoRoute              bool                             `json:"auto_route,omitempty"`
+ 	IPRoute2TableIndex     int                              `json:"iproute2_table_index,omitempty"`
+ 	IPRoute2RuleIndex      int                              `json:"iproute2_rule_index,omitempty"`
++	FIBIndex               int                              `json:"fib_index,omitempty"`
+ 	AutoRedirect           bool                             `json:"auto_redirect,omitempty"`
+ 	AutoRedirectInputMark  FwMark                           `json:"auto_redirect_input_mark,omitempty"`
+ 	AutoRedirectOutputMark FwMark                           `json:"auto_redirect_output_mark,omitempty"`
+diff --git a/protocol/tun/inbound.go b/protocol/tun/inbound.go
+index 7c80ebba..d6c10a0b 100644
+--- a/protocol/tun/inbound.go
++++ b/protocol/tun/inbound.go
+@@ -18,7 +18,7 @@ import (
+ 	"github.com/sagernet/sing-box/experimental/libbox/platform"
+ 	"github.com/sagernet/sing-box/log"
+ 	"github.com/sagernet/sing-box/option"
+-	"github.com/sagernet/sing-tun"
++	tun "github.com/sagernet/sing-tun"
+ 	"github.com/sagernet/sing/common"
+ 	E "github.com/sagernet/sing/common/exceptions"
+ 	"github.com/sagernet/sing/common/json/badoption"
+@@ -164,6 +164,10 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
+ 	if ruleIndex == 0 {
+ 		ruleIndex = tun.DefaultIPRoute2RuleIndex
+ 	}
++	fibIndex := options.FIBIndex
++	if fibIndex == 0 {
++		fibIndex = tun.DefaultFIBIndex
++	}
+ 	inputMark := uint32(options.AutoRedirectInputMark)
+ 	if inputMark == 0 {
+ 		inputMark = tun.DefaultAutoRedirectInputMark
+@@ -188,6 +192,7 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
+ 			AutoRoute:                options.AutoRoute,
+ 			IPRoute2TableIndex:       tableIndex,
+ 			IPRoute2RuleIndex:        ruleIndex,
++			FIBIndex:                 fibIndex,
+ 			AutoRedirectInputMark:    inputMark,
+ 			AutoRedirectOutputMark:   outputMark,
+ 			StrictRoute:              options.StrictRoute,
