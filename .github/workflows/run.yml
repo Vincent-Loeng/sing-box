@@ -17,8 +17,7 @@ jobs:
         run: |
           latest_version=$(curl -sSL https://api.github.com/repos/Sagernet/sing-box/releases | jq -r 'map(select(.prerelease)) | first | .tag_name' | sed 's|v||g')
           echo "RELEASE_NAME=${latest_version}-vincent-auto" >> $GITHUB_ENV
-          echo "TAG_NAME=v${latest_version}-vincent-auto" >> $
-          echo "version=v${latest_version}-vincent-auto" >> $GITHUB_ENV
+          echo "TAG_NAME=v${latest_version}-vincent-auto" >> $GITHUB_ENV
           echo "tags=with_gvisor,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_quic" >> $GITHUB_ENV
         shell: bash
 
@@ -83,7 +82,7 @@ jobs:
           arch_array=(amd64 386 arm arm64)
           for os in ${os_array[@]}; do
             for arch in ${arch_array[@]}; do
-              GOOS=${os} GOARCH=${arch} CGO_ENABLED=0 go build -v -trimpath -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${version}' -s -w -buildid=" -tags ${tags} ./cmd/sing-box
+              GOOS=${os} GOARCH=${arch} CGO_ENABLED=0 go build -v -trimpath -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${RELEASE_NAME}' -s -w -buildid=" -tags ${tags} ./cmd/sing-box
               mv sing-box sing-box-${os}-${arch}
             done
           done
