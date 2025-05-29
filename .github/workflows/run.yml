@@ -29,14 +29,14 @@ jobs:
 
       - name: Check for new version
         run: |
-          if [ -f last_verson ]; then
-            LAST_VERSION=$(cat last_verson)
+          if [ -f last_version ]; then
+            LAST_VERSION=$(cat last_version)
           else
             LAST_VERSION="none"
           fi
           echo "Last version: ${LAST_VERSION}, current version: ${RELEASE_NAME}"
           if [ "${{ env.RELEASE_NAME }}" != "${LAST_VERSION}" ]; then
-            echo "${{ env.RELEASE_NAME }}" > last_verson
+            echo "${{ env.RELEASE_NAME }}" > last_version
             echo "BUILD=true" >> $GITHUB_ENV
           else
             echo "BUILD=false" >> $GITHUB_ENV
