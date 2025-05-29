@@ -1,4 +1,4 @@
-name: Build binary files for FreeBSD
+name: Build
 on:
   workflow_dispatch:
   schedule:
@@ -41,17 +41,6 @@ jobs:
           else
             echo "BUILD=false" >> $GITHUB_ENV
           fi
-
-      - name: Git push last_tag to "hidden" branch
-        if: ${{ env.BUILD == 'true' }}
-        run: |
-          git config --local user.name "Vincent Loeng"
-          git config --local user.email "173226116+Vincent-Loeng@users.noreply.github.com"
-          git add last_tag
-          git commit -m "Release ${{ env.RELEASE_NAME }}"
-          git push
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Go
         if: ${{ env.BUILD == 'true' }}
@@ -104,6 +93,17 @@ jobs:
           prerelease: false
           files: |
             ./publish/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push last_tag to "hidden" branch
+        if: ${{ env.BUILD == 'true' }}
+        run: |
+          git config --local user.name "Vincent Loeng"
+          git config --local user.email "173226116+Vincent-Loeng@users.noreply.github.com"
+          git add last_tag
+          git commit -m "Release ${{ env.RELEASE_NAME }}"
+          git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
