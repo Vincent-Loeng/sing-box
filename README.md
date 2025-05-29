@@ -11,6 +11,9 @@ This self-use fork provides executable files for _**386, amd64, arm, and arm64**
 
 自用分支，提供 _**386、amd64、arm和arm64**_ 等架构的可执行文件
 
+Automatically build sing-box (FreeBSD) with patches
+
+自动使用补丁构建 sing-box (FreeBSD)
 
 ## Another tool 另一工具 [**mihomo for FreeBSD**](https://github.com/Vincent-Loeng/mihomo)
 
@@ -31,19 +34,15 @@ This self-use fork provides executable files for _**386, amd64, arm, and arm64**
 
 ## Notes 注意事项
 
-1. This repo does not update version frequently, please modify and compile it yourself if you need newer version
-
-   此仓库不会经常更新版本，如若需要新版本，请自行修改编译
-
-2. When automatic routing is enabled, this tool would handle the contents of /etc/resolv.conf
+1. When automatic routing is enabled, this tool would handle the contents of /etc/resolv.conf
 
    启用自动路由时，此工具将处理 resolv.conf 中的内容
 
-3. To be consistent with the official repo, the value of `auto_detect_interface` should be `false` since 1.12.0-beta.15-vincent-2, which does not affect tun interfaces
+2. The value of `auto_detect_interface` should be `false` since 1.12.0-beta.15-vincent-2, which does not affect tun interfaces
 
-   与原版仓库保持一致，自 1.12.0-beta.15-vincent-2 起，`auto_detect_interface`的值应该设为`false`，不影响 tun 网卡
+   自 1.12.0-beta.15-vincent-2 起，`auto_detect_interface`的值应该设为`false`，不影响 tun 网卡
 
-4. Please use `FakeIP` and `ignore dns` (an option in dhcpleased.conf) when using OpenBSD
+3. Please use `FakeIP` and `ignore dns` (an option in dhcpleased.conf) when using OpenBSD
 
    使用 OpenBSD 时，请用`FakeIP`和 `ignore dns` (dhcpleased.conf 中的一个选项) 
 
