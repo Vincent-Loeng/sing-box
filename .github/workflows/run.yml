@@ -29,24 +29,18 @@ jobs:
 
       - name: Check for new version
         run: |
-          if [ -f last_tag ]; then
-            LAST_TAG_NAME=$(cat last_tag)
+          if [ -f last_verson ]; then
+            LAST_VERSION=$(cat last_verson)
           else
-            LAST_TAG_NAME="none"
+            LAST_VERSION="none"
           fi
-          echo "Last tag: ${LAST_TAG_NAME}, current tag: ${TAG_NAME}"
-          if [ "${{ env.TAG_NAME }}" != "${LAST_TAG_NAME}" ]; then
-            echo "${{ env.TAG_NAME }}" > last_tag
+          echo "Last version: ${LAST_VERSION}, current version: ${RELEASE_NAME}"
+          if [ "${{ env.RELEASE_NAME }}" != "${LAST_VERSION}" ]; then
+            echo "${{ env.RELEASE_NAME }}" > last_verson
             echo "BUILD=true" >> $GITHUB_ENV
           else
             echo "BUILD=false" >> $GITHUB_ENV
           fi
-
-      - name: Setup Go
-        if: ${{ env.BUILD == 'true' }}
-        uses: actions/setup-go@v5
-        with:
-          go-version: ^1.24.3
 
       - name: Apply patches
         if: ${{ env.BUILD == 'true' }}
@@ -63,6 +57,12 @@ jobs:
           patch -p1 < ../sing-box.patch
           sing_tun_version=$(cat go.mod | grep github.com/sagernet/sing-tun | awk '{ print $2 }')
           echo -e "\nreplace github.com/sagernet/sing-tun ${sing_tun_version} => ../sing-tun" >> go.mod
+
+      - name: Setup Go
+        if: ${{ env.BUILD == 'true' }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ^1.24.3
 
       - name: Build binary files
         if: ${{ env.BUILD == 'true' }}
@@ -96,12 +96,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push last_tag to "hidden" branch
+      - name: Push last_version to "hidden" branch
         if: ${{ env.BUILD == 'true' }}
         run: |
           git config --local user.name "Vincent Loeng"
           git config --local user.email "173226116+Vincent-Loeng@users.noreply.github.com"
-          git add last_tag
+          git add last_version
           git commit -m "Release ${{ env.RELEASE_NAME }}"
           git push
         env:
