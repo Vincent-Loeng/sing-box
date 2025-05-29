@@ -1,26 +1,26 @@
 
 **This repo may not be maintained anymore. The tool is enough to speed up some websites, e.g., OpenAI**
 
-精力有限，可能不再维护和发布，目前足以加速某些网站，比如 OpenAI
+精力有限，可能不再维护，目前足以加速某些网站，比如 OpenAI
 
 ---
 
-# **sing-box for FreeBSD/OpenBSD**
+# sing-box for FreeBSD/OpenBSD (with tun support)
 
 This self-use fork provides executable files for _**386, amd64, arm, and arm64**_
 
 自用分支，提供 _**386、amd64、arm和arm64**_ 等架构的可执行文件
 
-Automatically build sing-box (FreeBSD) with patches
+This repo automatically builds the latest FreeBSD version of sing-box with patches, and the latest OpenBSD version is [1.12.0-beta.19-vincent-1](https://github.com/Vincent-Loeng/sing-box/releases/tag/1.12.0-beta.19-vincent-1)
 
-自动使用补丁构建 sing-box (FreeBSD)
+此仓库使用补丁自动构建最新的 sing-box FreeBSD 版本，最新的 OpenBSD 版本是 [1.12.0-beta.19-vincent-1](https://github.com/Vincent-Loeng/sing-box/releases/tag/1.12.0-beta.19-vincent-1)
 
 ## Another tool 另一工具 [**mihomo for FreeBSD**](https://github.com/Vincent-Loeng/mihomo)
 
 
 ## Known issues 已知问题
 
-1. Loops may happen in OpenBSD
+1. Loops may happen on OpenBSD
 
    OpenBSD 平台可能出现环路
 
@@ -34,168 +34,22 @@ Automatically build sing-box (FreeBSD) with patches
 
 ## Notes 注意事项
 
-1. When automatic routing is enabled, this tool would handle the contents of /etc/resolv.conf
-
-   启用自动路由时，此工具将处理 resolv.conf 中的内容
-
-2. The value of `auto_detect_interface` should be `false` since 1.12.0-beta.15-vincent-2, which does not affect tun interfaces
+1. The value of `auto_detect_interface` should be `false` since 1.12.0-beta.15-vincent-2, which does not affect tun interfaces
 
    自 1.12.0-beta.15-vincent-2 起，`auto_detect_interface`的值应该设为`false`，不影响 tun 网卡
 
-3. Please use `FakeIP` and `ignore dns` (an option in dhcpleased.conf) when using OpenBSD
+3. Please use `FakeIP` to avoid loops when using OpenBSD
 
-   使用 OpenBSD 时，请用`FakeIP`和 `ignore dns` (dhcpleased.conf 中的一个选项) 
+   使用 OpenBSD 时，请用`FakeIP`避免环路
 
 
 ## Examples 示例
 
-Please refer to the following template (1.12)
+Please refer to the given [template](template.json) (1.12)
 
-请参考提供的模板（1.12）
+请参考提供的[模板](template.json)（1.12）
 
-```json
-{
-  "inbounds": [
-    {
-      "type": "tun",
-      "tag": "tun-in",
-      "interface_name": "tun0",
-      "address": [
-        "172.19.0.0/30",
-        "fdfe:dcba:9876::0/126"
-      ],
-      "mtu": 9000,
-      // new option, default value is 2022
-      // 新增选项，默认值是2022
-      "fib_index": 2022,
-      // enable automatic routing
-      // 启用自动路由
-      "auto_route": true,
-      "strict_route": true,
-      "endpoint_independent_nat": false,
-      "stack": "system",
-      // Use custom routes instead of default when auto_route is enabled.
-      // 自定义路由
-      "route_address": [
-        // FakeIP ranges
-        "198.18.0.0/15",
-        "fc00::/18"
-        // addresses that need to be proxied
-        // 可在此处添加需要代理的地址
-      ]
-    }
-  ],
-  "outbounds": [
-    {
-      "tag": "proxy",
-      "type": "shadowsocks",
-      "server": "",
-      "server_port": 12345,
-      "method": "",
-      "password": ""
-    }
-  ],
-  // add proxy rules as needed
-  // 可按需添加规则
-  "route": {
-    "default_domain_resolver": {
-      "server": "local-dns"
-    },
-    "rules": [
-      {
-        "action": "sniff",
-        "inbound": "tun-in",
-        "sniffer": [
-          "dns",
-          "http",
-          "tls",
-          "quic"
-        ]
-      },
-      {
-        "action": "hijack-dns",
-        "type": "logical",
-        "mode": "or",
-        "rules": [
-          {
-            "port": 53
-          },
-          {
-            "protocol": "dns"
-          }
-        ]
-      },
-      {
-        "action": "route",
-        "ip_is_private": true,
-        "outbound": "direct"
-      },
-      {
-        "action": "route",
-        "rule_set": "openai",
-        "outbound": "proxy"
-      }
-    ],
-    "rule_set": [
-      {
-        "tag": "openai",
-        "type": "remote",
-        "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/sing/geo/geosite/openai.srs",
-        "format": "binary",
-        "download_detour": "proxy"
-      }
-    ],
-    "auto_detect_interface": false,
-    "final": "direct"
-  },
-  "dns": {
-    "servers": [
-      {
-        "tag": "local-dns",
-        "type": "udp",
-        "server": "223.5.5.5"
-      },
-      {
-        "tag": "remote-dns",
-        "type": "udp",
-        "server": "8.8.8.8",
-        "detour": "proxy"
-      },
-      {
-        "tag": "fakeip-dns",
-        "type": "fakeip",
-        "inet4_range": "198.18.0.0/15",
-        "inet6_range": "fc00::/18"
-      }
-    ],
-    "rules": [
-      {
-        "action": "route",
-        "invert": true,
-        "rule_set": [
-          "openai"
-        ],
-        "server": "local-dns"
-      },
-      {
-        "action": "route",
-        "query_type": [
-          "A",
-          "AAAA"
-        ],
-        "server": "fakeip-dns",
-        "rewrite_ttl": 1
-      }
-    ],
-    "disable_cache": false,
-    "disable_expire": false,
-    "independent_cache": true,
-    "final": "remote-dns",
-    "strategy": "prefer_ipv4"
-  }
-}
-```
-
+---
 
 # sing-box
 
