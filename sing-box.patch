@@ -1,9 +1,9 @@
 diff --git a/common/process/searcher_freebsd.go b/common/process/searcher_freebsd.go
 new file mode 100644
-index 0000000..e1eac5b
+index 0000000..55578b9
 --- /dev/null
 +++ b/common/process/searcher_freebsd.go
-@@ -0,0 +1,248 @@
+@@ -0,0 +1,251 @@
 +package process
 +
 +import (
@@ -11,7 +11,6 @@ index 0000000..e1eac5b
 +	"encoding/binary"
 +	"fmt"
 +	"net/netip"
-+	"runtime"
 +	"strconv"
 +	"strings"
 +	"sync"
@@ -198,7 +197,7 @@ index 0000000..e1eac5b
 +	return 0, ErrNotFound
 +}
 +
-+func newSearcher(major int) *searcher {
++func newSearcher(major int, machine string) *searcher {
 +	var s *searcher
 +	switch major {
 +	case 12:
@@ -209,9 +208,9 @@ index 0000000..e1eac5b
 +		fallthrough
 +	case 15:
 +		var vflag int
-+		if runtime.GOARCH == "386" || runtime.GOARCH == "arm" {
++		if machine == "i386" {
 +			vflag = 388
-+		} else if runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64" {
++		} else if machine == "amd64" || machine == "arm64" {
 +			vflag = 392
 +		} else {
 +			return nil
@@ -237,6 +236,10 @@ index 0000000..e1eac5b
 +	if err != nil {
 +		return err
 +	}
++	machine, err := syscall.Sysctl("hw.machine")
++	if err != nil {
++		return err
++	}
 +
 +	dot := strings.Index(osRelease, ".")
 +	if dot != -1 {
@@ -246,7 +249,7 @@ index 0000000..e1eac5b
 +	if err != nil {
 +		return err
 +	}
-+	defaultSearcher = newSearcher(major)
++	defaultSearcher = newSearcher(major, machine)
 +	if defaultSearcher == nil {
 +		return fmt.Errorf("unsupported freebsd version %d", major)
 +	}
