@@ -1,6 +1,6 @@
 diff --git a/common/process/searcher_freebsd.go b/common/process/searcher_freebsd.go
 new file mode 100644
-index 0000000..55578b9
+index 0000000..4051c98
 --- /dev/null
 +++ b/common/process/searcher_freebsd.go
 @@ -0,0 +1,251 @@
@@ -251,7 +251,7 @@ index 0000000..55578b9
 +	}
 +	defaultSearcher = newSearcher(major, machine)
 +	if defaultSearcher == nil {
-+		return fmt.Errorf("unsupported freebsd version %d", major)
++		return fmt.Errorf("unsupported freebsd version %d (%s)", major, machine)
 +	}
 +	return nil
 +}
