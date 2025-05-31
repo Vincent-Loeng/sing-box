@@ -111,10 +111,10 @@ index b0f573a..79cd436 100644
  			if !o.InterfaceScope {
 diff --git a/tun_freebsd.go b/tun_freebsd.go
 new file mode 100644
-index 0000000..99fa008
+index 0000000..6a2b96e
 --- /dev/null
 +++ b/tun_freebsd.go
-@@ -0,0 +1,714 @@
+@@ -0,0 +1,711 @@
 +/* SPDX-License-Identifier: MIT
 + *
 + * Copyright (C) 2017-2023 WireGuard LLC. All Rights Reserved.
@@ -130,10 +130,8 @@ index 0000000..99fa008
 +	"net/netip"
 +	"os"
 +	"os/exec"
-+	"strconv"
 +	"strings"
 +	"syscall"
-+	"time"
 +	"unsafe"
 +
 +	"github.com/sagernet/sing-tun/internal/gtcpip/header"
@@ -411,9 +409,9 @@ index 0000000..99fa008
 +		return err
 +	}
 +	if add_addr == 0 {
-+		output, err := exec.Command("sysctl", "net.add_addr_allfibs=1").CombinedOutput()
++		err = runCommand("sysctl net.add_addr_allfibs=1")
 +		if err != nil {
-+			return E.New("execute \"sysctl net.add_addr_allfibs=1\"\n", string(output))
++			return err
 +		}
 +	}
 +	fibs, err := unix.SysctlUint32("net.fibs")
@@ -422,9 +420,9 @@ index 0000000..99fa008
 +	}
 +	var fibSize int = options.FIBIndex + 1
 +	if fibs < uint32(fibSize) {
-+		output, err := exec.Command("sysctl", fmt.Sprintf("net.fibs=%d", fibSize)).CombinedOutput()
++		err = runCommand(fmt.Sprintf("sysctl net.fibs=%d\n", fibSize))
 +		if err != nil {
-+			return E.New(fmt.Sprintf("execute \"sysctl net.fibs=%d\"\n", fibSize), string(output))
++			return err
 +		}
 +	}
 +
@@ -481,8 +479,9 @@ index 0000000..99fa008
 +	if err != nil {
 +		return err
 +	}
-+	exec.Command("setfib", strconv.Itoa(fibSize-1), "route", "delete", "default").CombinedOutput()
-+	exec.Command("setfib", strconv.Itoa(fibSize-1), "route", "delete", "-inet6", "default").CombinedOutput()
++	runCommand(fmt.Sprintf("setfib %d route delete default", fibSize-1))
++	runCommand(fmt.Sprintf("setfib %d route delete -inet6 default", fibSize-1))
++
 +	ribMessage, err = route.FetchRIB(unix.AF_UNSPEC, route.RIBTypeRoute, 0)
 +	if err != nil {
 +		return err
@@ -495,21 +494,16 @@ index 0000000..99fa008
 +		return E.New("empty fib, please change the `fib_index`")
 +	}
 +	if defaultGateway4 != "" {
-+		output, err := exec.Command(
-+			"setfib", strconv.Itoa(fibSize-1), "route", "add", "default", defaultGateway4,
-+		).CombinedOutput()
++		err = runCommand(fmt.Sprintf("setfib %d route add default %s", fibSize-1, defaultGateway4))
 +		if err != nil {
-+			return E.New("add ipv4 gateway\n", string(output))
++			return err
 +		}
 +	}
 +	if defaultGateway6 != "" {
 +		interfaceName := options.InterfaceMonitor.DefaultInterface().Name
-+		output, err := exec.Command(
-+			"setfib", strconv.Itoa(fibSize-1), "route", "add", "-inet6", "default",
-+			fmt.Sprintf("%s%%%s", defaultGateway6, interfaceName),
-+		).CombinedOutput()
++		err = runCommand(fmt.Sprintf("setfib %d route add -inet6 default %s%%%s", fibSize-1, defaultGateway6, interfaceName))
 +		if err != nil {
-+			return E.New("add ipv6 gateway\n", string(output))
++			return err
 +		}
 +	}
 +
@@ -652,24 +646,16 @@ index 0000000..99fa008
 +
 +func setTunAddress(name string, options Options) error {
 +	if len(options.Inet4Address) > 0 {
-+		output, err := exec.Command(
-+			"/sbin/ifconfig", name, "inet",
-+			options.Inet4Address[0].String(), "up",
-+		).CombinedOutput()
++		err := runCommand(fmt.Sprintf("/sbin/ifconfig %s inet %s up", name, options.Inet4Address[0].String()))
 +		if err != nil {
-+			return E.New("add ipv4 address\n", string(output))
++			return err
 +		}
-+		time.Sleep(2)
 +	}
 +	if len(options.Inet6Address) > 0 {
-+		output, err := exec.Command(
-+			"/sbin/ifconfig", name, "inet6",
-+			options.Inet6Address[0].String(), "up",
-+		).CombinedOutput()
++		err := runCommand(fmt.Sprintf("/sbin/ifconfig %s inet6 %s up", name, options.Inet6Address[0].String()))
 +		if err != nil {
-+			return E.New("add ipv6 address\n", string(output))
++			return err
 +		}
-+		time.Sleep(2)
 +	}
 +	return nil
 +}
@@ -703,6 +689,17 @@ index 0000000..99fa008
 +	err := os.WriteFile(resolvPath, resolvByte[:], 0644)
 +	if err != nil {
 +		return err
++	}
++	return nil
++}
++
++func runCommand(commandStr string) error {
++	var command *exec.Cmd
++	command = exec.Command(
++		"/bin/sh", "-c", commandStr)
++	combinedOutput, err := command.CombinedOutput()
++	if err != nil {
++		return E.New(commandStr, ": ", string(combinedOutput))
 +	}
 +	return nil
 +}
