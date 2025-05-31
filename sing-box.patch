@@ -267,35 +267,89 @@ index 4665d91..1464efb 100644
  
 diff --git a/common/redir/redir_freebsd.go b/common/redir/redir_freebsd.go
 new file mode 100644
-index 0000000..1aef14f
+index 0000000..25afbd6
 --- /dev/null
 +++ b/common/redir/redir_freebsd.go
-@@ -0,0 +1,26 @@
+@@ -0,0 +1,80 @@
 +package redir
 +
 +import (
++	"errors"
++	"fmt"
 +	"net"
 +	"net/netip"
++	"os"
++	"os/exec"
++	"strconv"
++	"strings"
 +
++	E "github.com/sagernet/sing/common/exceptions"
 +	M "github.com/sagernet/sing/common/metadata"
++	"golang.org/x/sys/unix"
++)
++
++const (
++	PF_IN       = 0x1
++	PF_OUT      = 0x2
++	DIOCNATLOOK = 0xc04c4417
 +)
 +
 +func GetOriginalDestination(conn net.Conn) (destination netip.AddrPort, err error) {
-+	// ipfw fwd
-+	la := conn.LocalAddr().(*net.TCPAddr)
-+	//ra := conn.RemoteAddr().(*net.TCPAddr)
-+	//fmt.Println(la, ra)
-+
-+	var ip net.IP
-+	if la.IP.To4() != nil {
-+		ip = make(net.IP, net.IPv4len)
-+		copy(ip, la.IP[net.IPv6len-net.IPv4len:])
-+	} else {
-+		ip = make(net.IP, net.IPv6len)
-+		copy(ip, la.IP[:])
++	_, err = os.Stat("/dev/pf")
++	if errors.Is(err, os.ErrNotExist) {
++		// ipfw fwd
++		la := conn.LocalAddr().(*net.TCPAddr)
++		var ip net.IP
++		if la.IP.To4() != nil {
++			ip = make(net.IP, net.IPv4len)
++			copy(ip, la.IP[net.IPv6len-net.IPv4len:])
++		} else {
++			ip = make(net.IP, net.IPv6len)
++			copy(ip, la.IP[:])
++		}
++		destination = netip.AddrPortFrom(M.AddrFromIP(ip), uint16(la.Port))
++		return destination, nil
 +	}
-+	destination = netip.AddrPortFrom(M.AddrFromIP(ip), uint16(la.Port))
-+	return destination, nil
++
++	// pf rdr
++	la := conn.LocalAddr().(*net.TCPAddr)
++	ra := conn.RemoteAddr().(*net.TCPAddr)
++	output, err := exec.Command("/sbin/pfctl", "-s", "state").CombinedOutput()
++	if err != nil {
++		return netip.AddrPort{}, err
++	}
++
++	var addrString string
++	var ip net.IP
++	var port uint16
++	lines := strings.Split(unix.ByteSliceToString(output[:]), "\n")
++	for _, line := range lines {
++		esIndex := strings.Index(line, "ESTABLISHED:ESTABLISHED")
++		if esIndex == -1 {
++			continue
++		}
++		if la.IP.To4() != nil {
++			startIndex := strings.Index(line, "(")
++			endIndex := strings.Index(line, fmt.Sprintf(") <- %s", ra.String()))
++			if endIndex != -1 {
++				addrString = line[startIndex+1 : endIndex]
++				colonIndex := strings.Index(addrString, ":")
++				ipTemp := net.ParseIP(addrString[:colonIndex])
++				ip = make(net.IP, net.IPv4len)
++				copy(ip, ipTemp[12:])
++				portTemp, err := strconv.Atoi(addrString[colonIndex+1:])
++				if err != nil {
++					return netip.AddrPort{}, err
++				}
++				port = uint16(portTemp)
++				return netip.AddrPortFrom(M.AddrFromIP(ip), port), nil
++			}
++		} else {
++			return netip.AddrPort{}, E.New("ipv6 not supported")
++		}
++	}
++	return netip.AddrPort{}, E.New("")
++
 +}
 diff --git a/common/redir/redir_other.go b/common/redir/redir_other.go
 index 3d60afe..7c5ee21 100644
