@@ -52,27 +52,27 @@ index 6a8a9c0..d26921b 100644
  ## License
  
 diff --git a/monitor_other.go b/monitor_other.go
-index c6b447c..429c319 100644
+index c6b447c..398b31c 100644
 --- a/monitor_other.go
 +++ b/monitor_other.go
 @@ -1,4 +1,4 @@
 -//go:build !(linux || windows || darwin)
-+//go:build !(linux || windows || darwin || freebsd)
++//go:build !(linux || windows || darwin || freebsd || openbsd)
  
  package tun
  
 diff --git a/monitor_shared.go b/monitor_shared.go
-index 12e3e21..2705e5f 100644
+index 12e3e21..152ddc1 100644
 --- a/monitor_shared.go
 +++ b/monitor_shared.go
 @@ -1,4 +1,4 @@
 -//go:build linux || windows || darwin
-+//go:build linux || windows || darwin || freebsd
++//go:build linux || windows || darwin || freebsd || openbsd
  
  package tun
  
 diff --git a/tun.go b/tun.go
-index b0f573a..79cd436 100644
+index b0f573a..7e1a951 100644
 --- a/tun.go
 +++ b/tun.go
 @@ -48,6 +48,7 @@ type LinuxTUN interface {
@@ -91,21 +91,25 @@ index b0f573a..79cd436 100644
  	AutoRedirectMarkMode     bool
  	AutoRedirectInputMark    uint32
  	AutoRedirectOutputMark   uint32
-@@ -102,6 +104,8 @@ func (o *Options) Inet4GatewayAddr() netip.Addr {
+@@ -102,6 +104,10 @@ func (o *Options) Inet4GatewayAddr() netip.Addr {
  				return o.Inet4Address[0].Addr().Next()
  			}
  		case "darwin":
 +			fallthrough
 +		case "freebsd":
++			fallthrough
++		case "openbsd":
  			return o.Inet4Address[0].Addr()
  		default:
  			if !o.InterfaceScope {
-@@ -128,6 +132,8 @@ func (o *Options) Inet6GatewayAddr() netip.Addr {
+@@ -128,6 +134,10 @@ func (o *Options) Inet6GatewayAddr() netip.Addr {
  				return o.Inet6Address[0].Addr().Next()
  			}
  		case "darwin":
 +			fallthrough
 +		case "freebsd":
++			fallthrough
++		case "openbsd":
  			return o.Inet6Address[0].Addr()
  		default:
  			if !o.InterfaceScope {
@@ -832,35 +836,54 @@ index 0000000..c755bc8
 +	})
 +}
 diff --git a/tun_nondarwin.go b/tun_nondarwin.go
-index 0faa2c9..27a1552 100644
+index 0faa2c9..547ddfa 100644
 --- a/tun_nondarwin.go
 +++ b/tun_nondarwin.go
 @@ -1,4 +1,4 @@
 -//go:build !darwin
-+//go:build !(darwin || freebsd)
++//go:build !(darwin || freebsd || openbsd)
  
  package tun
  
 diff --git a/tun_other.go b/tun_other.go
-index 1db48f9..432d26b 100644
+index 1db48f9..d8fb2e1 100644
 --- a/tun_other.go
 +++ b/tun_other.go
 @@ -1,4 +1,4 @@
 -//go:build !(linux || windows || darwin)
-+//go:build !(linux || windows || darwin || freebsd)
++//go:build !(linux || windows || darwin || freebsd || openbsd)
  
  package tun
  
 diff --git a/tun_rules.go b/tun_rules.go
-index c1b983f..f94a84d 100644
+index c1b983f..6832471 100644
 --- a/tun_rules.go
 +++ b/tun_rules.go
-@@ -104,7 +104,7 @@ func buildExcludedRanges(includeRanges []ranges.Range[uint32], excludeRanges []r
+@@ -104,7 +104,8 @@ func buildExcludedRanges(includeRanges []ranges.Range[uint32], excludeRanges []r
  	return ranges.Merge(uidRanges)
  }
  
 -const autoRouteUseSubRanges = runtime.GOOS == "darwin"
 +const autoRouteUseSubRanges = runtime.GOOS == "darwin" || runtime.GOOS == "freebsd"
++const autoRouteUseFakeIPRanges = runtime.GOOS == "openbsd"
  
  func (o *Options) BuildAutoRouteRanges(underNetworkExtension bool) ([]netip.Prefix, error) {
  	var routeRanges []netip.Prefix
+@@ -131,6 +132,8 @@ func (o *Options) BuildAutoRouteRanges(underNetworkExtension bool) ([]netip.Pref
+ 					netip.PrefixFrom(netip.AddrFrom4([4]byte{0: 64}), 2),
+ 					netip.PrefixFrom(netip.AddrFrom4([4]byte{0: 128}), 1),
+ 				}
++			} else if autoRouteUseFakeIPRanges {
++				return []netip.Prefix{}, E.New("please use FakeIP ranges")
+ 			} else {
+ 				inet4Ranges = []netip.Prefix{netip.PrefixFrom(netip.IPv4Unspecified(), 0)}
+ 			}
+@@ -181,6 +184,8 @@ func (o *Options) BuildAutoRouteRanges(underNetworkExtension bool) ([]netip.Pref
+ 					netip.PrefixFrom(netip.AddrFrom16([16]byte{0: 64}), 2),
+ 					netip.PrefixFrom(netip.AddrFrom16([16]byte{0: 128}), 1),
+ 				}
++			} else if autoRouteUseFakeIPRanges {
++				return []netip.Prefix{}, E.New("please use FakeIP ranges")
+ 			} else {
+ 				inet6Ranges = []netip.Prefix{netip.PrefixFrom(netip.IPv6Unspecified(), 0)}
+ 			}

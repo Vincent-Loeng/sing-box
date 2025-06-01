@@ -267,23 +267,22 @@ index 4665d91..1464efb 100644
  
 diff --git a/common/redir/redir_freebsd.go b/common/redir/redir_freebsd.go
 new file mode 100644
-index 0000000..451eba5
+index 0000000..daa30d7
 --- /dev/null
 +++ b/common/redir/redir_freebsd.go
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,95 @@
 +package redir
 +
 +import (
-+	"fmt"
++	"encoding/binary"
++	"errors"
 +	"net"
 +	"net/netip"
-+	"os/exec"
-+	"strconv"
-+	"strings"
++	"os"
++	"syscall"
++	"unsafe"
 +
-+	E "github.com/sagernet/sing/common/exceptions"
 +	M "github.com/sagernet/sing/common/metadata"
-+	"golang.org/x/sys/unix"
 +)
 +
 +const (
@@ -292,10 +291,20 @@ index 0000000..451eba5
 +	DIOCNATLOOK = 0xc04c4417
 +)
 +
++func Ntohs(i uint16) uint16 {
++	return binary.BigEndian.Uint16((*(*[2]byte)(unsafe.Pointer(&i)))[:])
++}
++
++func Htons(i uint16) uint16 {
++	b := make([]byte, 2)
++	binary.BigEndian.PutUint16(b, i)
++	return *(*uint16)(unsafe.Pointer(&b[0]))
++}
++
 +func GetOriginalDestination(conn net.Conn) (destination netip.AddrPort, err error) {
-+	_, err = exec.Command("service", "pf", "status").CombinedOutput()
-+	if err != nil {
-+		// ipfw fwd
++	_, err = os.Stat("/dev/pf")
++	if errors.Is(err, os.ErrNotExist) {
++		// ipfw
 +		la := conn.LocalAddr().(*net.TCPAddr)
 +		var ip net.IP
 +		if la.IP.To4() != nil {
@@ -309,66 +318,61 @@ index 0000000..451eba5
 +		return destination, nil
 +	}
 +
-+	// pf rdr
-+	la := conn.LocalAddr().(*net.TCPAddr)
-+	ra := conn.RemoteAddr().(*net.TCPAddr)
-+	output, err := exec.Command("/sbin/pfctl", "-s", "state").CombinedOutput()
++	// pf
++	fd, err := syscall.Open("/dev/pf", 0, syscall.O_RDWR)
 +	if err != nil {
 +		return netip.AddrPort{}, err
 +	}
-+
-+	var addrString string
-+	var ip net.IP
-+	var port uint16
-+	lines := strings.Split(unix.ByteSliceToString(output[:]), "\n")
-+	for _, line := range lines {
-+		esIndex := strings.Index(line, "ESTABLISHED:ESTABLISHED")
-+		if esIndex == -1 {
-+			continue
-+		}
-+
-+		if la.IP.To4() != nil {
-+			startIndex := strings.Index(line, "(")
-+			endIndex := strings.Index(line, fmt.Sprintf(") <- %s", ra.String()))
-+			if endIndex != -1 {
-+				addrString = line[startIndex+1 : endIndex]
-+				colonIndex := strings.Index(addrString, ":")
-+				ipTemp := net.ParseIP(addrString[:colonIndex])
-+				ip = make(net.IP, net.IPv4len)
-+				copy(ip, ipTemp[12:])
-+				portTemp, err := strconv.Atoi(addrString[colonIndex+1:])
-+				if err != nil {
-+					return netip.AddrPort{}, err
-+				}
-+				port = uint16(portTemp)
-+				return netip.AddrPortFrom(M.AddrFromIP(ip), port), nil
-+			}
-+		} else {
-+			startIndex := strings.Index(line, "(")
-+			endString := fmt.Sprintf(") <- %s[%d]", ra.IP.String(), ra.Port)
-+			endIndex := strings.Index(line, endString)
-+			if endIndex != -1 {
-+				addrString = line[startIndex+1 : endIndex]
-+				bracketIndex := strings.Index(addrString, "[")
-+				ip := net.ParseIP(addrString[:bracketIndex])
-+				portTemp, err := strconv.Atoi(addrString[bracketIndex+1 : len(addrString)-1])
-+				if err != nil {
-+					return netip.AddrPort{}, err
-+				}
-+				port := uint16(portTemp)
-+				return netip.AddrPortFrom(M.AddrFromIP(ip), port), nil
-+			}
-+		}
++	defer syscall.Close(fd)
++	nl := struct {
++		saddr, daddr, rsaddr, rdaddr [16]byte
++		sport, dport, rsport, rdport [2]byte
++		af, proto, direction         uint8
++	}{
++		af:        syscall.AF_INET,
++		proto:     syscall.IPPROTO_TCP,
++		direction: PF_OUT,
 +	}
-+	return netip.AddrPort{}, E.New("no pf states")
++	la := conn.LocalAddr().(*net.TCPAddr)
++	ra := conn.RemoteAddr().(*net.TCPAddr)
++	raIP, laIP := ra.IP, la.IP
++	raPort, laPort := ra.Port, la.Port
++	switch {
++	case raIP.To4() != nil:
++		copy(nl.saddr[:net.IPv4len], raIP.To4())
++		copy(nl.daddr[:net.IPv4len], laIP.To4())
++		nl.af = syscall.AF_INET
++	default:
++		copy(nl.saddr[:], raIP.To16())
++		copy(nl.daddr[:], laIP.To16())
++		nl.af = syscall.AF_INET6
++	}
++	binary.BigEndian.PutUint16(nl.sport[:], uint16(raPort))
++	binary.BigEndian.PutUint16(nl.dport[:], uint16(laPort))
++	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), DIOCNATLOOK, uintptr(unsafe.Pointer(&nl))); errno != 0 {
++		return netip.AddrPort{}, errno
++	}
++
++	var ip net.IP
++	switch nl.af {
++	case syscall.AF_INET:
++		ip = make(net.IP, net.IPv4len)
++		copy(ip, nl.rdaddr[:net.IPv4len])
++	case syscall.AF_INET6:
++		ip = make(net.IP, net.IPv6len)
++		copy(ip, nl.rdaddr[:])
++	}
++	port := binary.BigEndian.Uint16(nl.rdport[:])
++	destination = netip.AddrPortFrom(M.AddrFromIP(ip), port)
++	return
 +}
 diff --git a/common/redir/redir_other.go b/common/redir/redir_other.go
-index 3d60afe..7c5ee21 100644
+index 3d60afe..3ee166d 100644
 --- a/common/redir/redir_other.go
 +++ b/common/redir/redir_other.go
 @@ -1,4 +1,4 @@
 -//go:build !linux && !darwin
-+//go:build !linux && !darwin && !freebsd
++//go:build !linux && !darwin && !freebsd && !openbsd
  
  package redir
  
