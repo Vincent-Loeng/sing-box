@@ -111,10 +111,10 @@ index b0f573a..79cd436 100644
  			if !o.InterfaceScope {
 diff --git a/tun_freebsd.go b/tun_freebsd.go
 new file mode 100644
-index 0000000..ab58787
+index 0000000..c755bc8
 --- /dev/null
 +++ b/tun_freebsd.go
-@@ -0,0 +1,719 @@
+@@ -0,0 +1,716 @@
 +/* SPDX-License-Identifier: MIT
 + *
 + * Copyright (C) 2017-2023 WireGuard LLC. All Rights Reserved.
@@ -169,11 +169,8 @@ index 0000000..ab58787
 +			return nil, E.New("interface name too long: ", options.Name)
 +		}
 +
-+		hostname, err := syscall.Sysctl("kern.hostname")
-+		if err != nil {
-+			return nil, err
-+		}
-+		if strings.Index(hostname, "OPNsense") != -1 && options.Name == "tun" {
++		// For OPNsense
++		if options.Name == "tun" {
 +			return nil, E.New("bad tun name: ", options.Name)
 +		}
 +
