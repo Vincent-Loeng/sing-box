@@ -267,10 +267,10 @@ index 4665d91..1464efb 100644
  
 diff --git a/common/redir/redir_freebsd.go b/common/redir/redir_freebsd.go
 new file mode 100644
-index 0000000..eba3526
+index 0000000..451eba5
 --- /dev/null
 +++ b/common/redir/redir_freebsd.go
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,91 @@
 +package redir
 +
 +import (
@@ -326,6 +326,7 @@ index 0000000..eba3526
 +		if esIndex == -1 {
 +			continue
 +		}
++
 +		if la.IP.To4() != nil {
 +			startIndex := strings.Index(line, "(")
 +			endIndex := strings.Index(line, fmt.Sprintf(") <- %s", ra.String()))
@@ -343,11 +344,23 @@ index 0000000..eba3526
 +				return netip.AddrPortFrom(M.AddrFromIP(ip), port), nil
 +			}
 +		} else {
-+			return netip.AddrPort{}, E.New("ipv6 not supported")
++			startIndex := strings.Index(line, "(")
++			endString := fmt.Sprintf(") <- %s[%d]", ra.IP.String(), ra.Port)
++			endIndex := strings.Index(line, endString)
++			if endIndex != -1 {
++				addrString = line[startIndex+1 : endIndex]
++				bracketIndex := strings.Index(addrString, "[")
++				ip := net.ParseIP(addrString[:bracketIndex])
++				portTemp, err := strconv.Atoi(addrString[bracketIndex+1 : len(addrString)-1])
++				if err != nil {
++					return netip.AddrPort{}, err
++				}
++				port := uint16(portTemp)
++				return netip.AddrPortFrom(M.AddrFromIP(ip), port), nil
++			}
 +		}
 +	}
 +	return netip.AddrPort{}, E.New("no pf states")
-+
 +}
 diff --git a/common/redir/redir_other.go b/common/redir/redir_other.go
 index 3d60afe..7c5ee21 100644
