@@ -22,11 +22,11 @@ This repo automatically builds the latest FreeBSD version of sing-box with patch
 
 1. Tun interface Tun网卡
 
-2. Matching process is supported in FreeBSD since 1.12.0-beta.15-vincent-2
+2. Matching process is supported on FreeBSD since 1.12.0-beta.15-vincent-2
 
    自 1.12.0-beta.15-vincent-2 起，FreeBSD 平台支持匹配进程
 
-3. Redirect (IPFW/PF) is supported in FreeBSD since 1.12.0-beta.20-vincent-auto
+3. Redirect (IPFW/PF) is supported on FreeBSD since 1.12.0-beta.20-vincent-auto
 
    自 1.12.0-beta.20-vincent-auto 起，FreeBSD 平台支持 redirect (IPFW/PF)
 
