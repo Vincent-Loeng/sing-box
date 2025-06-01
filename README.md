@@ -53,11 +53,11 @@ This repo automatically builds the latest FreeBSD version of sing-box with patch
 
    在 OPNsense 上使用自动路由时，请手动配置 DNS 服务器
 
-3. Please allow packets to pass when using `system` stack on OPNsense
+3. Please allow packets to pass when using `system` stack on pfSense/OPNsense
 
-   在 OPNsense 上使用`system`栈时，请允许数据包通过
+   在 pfSense/OPNsense 上使用`system`栈时，请允许数据包通过
 
-3. Please use `FakeIP` to avoid loops when using OpenBSD
+4. Please use `FakeIP` to avoid loops when using OpenBSD
 
    使用 OpenBSD 时，请用`FakeIP`避免环路
 
