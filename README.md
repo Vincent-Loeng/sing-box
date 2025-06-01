@@ -49,9 +49,13 @@ This repo automatically builds the latest FreeBSD version of sing-box with patch
 
    自 1.12.0-beta.15-vincent-2 起，`auto_detect_interface`的值应该设为`false`，不影响 tun 网卡
 
-2. Please disable DNS override when using automatic routing on OPNsense
+2. Please configure DNS servers manually when using automatic routing on OPNsense
 
-   在 OPNsense 上使用自动路由时，请禁用 DNS 覆盖
+   在 OPNsense 上使用自动路由时，请手动配置 DNS 服务器
+
+3. Please allow packets to pass when using `system` stack on OPNsense
+
+   在 OPNsense 上使用`system`栈时，请允许数据包通过
 
 3. Please use `FakeIP` to avoid loops when using OpenBSD
 
