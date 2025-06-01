@@ -27,6 +27,14 @@
         // addresses that need to be proxied
         // 可在此处添加需要代理的地址
       ]
+    },
+    // redirect inbound available since 1.12.0-beta.20-vincent-auto
+    // 自 1.12.0-beta.20-vincent-auto 起，redirect 入站可用
+    {
+      "type": "redirect",
+      "tag": "redirect-in",
+      "listen": "::",
+      "listen_port": 7891
     }
   ],
   "outbounds": [
