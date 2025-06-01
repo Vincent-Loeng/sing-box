@@ -267,18 +267,16 @@ index 4665d91..1464efb 100644
  
 diff --git a/common/redir/redir_freebsd.go b/common/redir/redir_freebsd.go
 new file mode 100644
-index 0000000..25afbd6
+index 0000000..eba3526
 --- /dev/null
 +++ b/common/redir/redir_freebsd.go
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,78 @@
 +package redir
 +
 +import (
-+	"errors"
 +	"fmt"
 +	"net"
 +	"net/netip"
-+	"os"
 +	"os/exec"
 +	"strconv"
 +	"strings"
@@ -295,8 +293,8 @@ index 0000000..25afbd6
 +)
 +
 +func GetOriginalDestination(conn net.Conn) (destination netip.AddrPort, err error) {
-+	_, err = os.Stat("/dev/pf")
-+	if errors.Is(err, os.ErrNotExist) {
++	_, err = exec.Command("service", "pf", "status").CombinedOutput()
++	if err != nil {
 +		// ipfw fwd
 +		la := conn.LocalAddr().(*net.TCPAddr)
 +		var ip net.IP
@@ -348,7 +346,7 @@ index 0000000..25afbd6
 +			return netip.AddrPort{}, E.New("ipv6 not supported")
 +		}
 +	}
-+	return netip.AddrPort{}, E.New("")
++	return netip.AddrPort{}, E.New("no pf states")
 +
 +}
 diff --git a/common/redir/redir_other.go b/common/redir/redir_other.go
