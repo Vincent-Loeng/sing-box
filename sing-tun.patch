@@ -845,6 +845,500 @@ index 0faa2c9..547ddfa 100644
  
  package tun
  
+diff --git a/tun_openbsd.go b/tun_openbsd.go
+new file mode 100644
+index 0000000..d436fcd
+--- /dev/null
++++ b/tun_openbsd.go
+@@ -0,0 +1,488 @@
++/* SPDX-License-Identifier: MIT
++ *
++ * Copyright (C) 2017-2023 WireGuard LLC. All Rights Reserved.
++ */
++// The code about tun configuration was obtained partially from wireguard-go.
++
++package tun
++
++import (
++	"bufio"
++	"errors"
++	"fmt"
++	"io"
++	"net"
++	"net/netip"
++	"os"
++	"os/exec"
++	"strings"
++	"syscall"
++	"unsafe"
++
++	"github.com/sagernet/sing-tun/internal/gtcpip/header"
++	"github.com/sagernet/sing/common"
++	"github.com/sagernet/sing/common/buf"
++	E "github.com/sagernet/sing/common/exceptions"
++
++	"golang.org/x/net/route"
++	"golang.org/x/sys/unix"
++)
++
++const PacketOffset = 4
++
++type NativeTun struct {
++	tunFile      *os.File
++	tunResolv    string
++	options      Options
++	inet4Address [4]byte
++	inet6Address [16]byte
++	routeSet     bool
++}
++
++func (t *NativeTun) Name() (string, error) {
++	return getTUnName(t.tunFile)
++}
++
++func New(options Options) (Tun, error) {
++	var nativeTun *NativeTun
++	var tunFd int
++	if options.FileDescriptor == 0 {
++		ifIndex := -1
++		_, err := fmt.Sscanf(options.Name, "tun%d", &ifIndex)
++		if err != nil || ifIndex < 0 {
++			return nil, E.New("bad tun name: ", options.Name)
++		}
++
++		tunFile, err := os.OpenFile(fmt.Sprintf("/dev/tun%d", ifIndex), unix.O_RDWR|unix.O_CLOEXEC, 0)
++		if err != nil {
++			return nil, err
++		}
++
++		err = configure(options.Name, options)
++		if err != nil {
++			return nil, E.Errors(err, tunFile.Close())
++		}
++
++		var resolvString string = ""
++		if options.AutoRoute {
++			err := checkDHCP(options.InterfaceMonitor.DefaultInterface().Name)
++			if err != nil {
++				return nil, E.Errors(err, tunFile.Close())
++			}
++			resolvString, err = setDNSServers(options)
++			if err != nil {
++				return nil, E.Errors(err, tunFile.Close())
++			}
++		}
++
++		nativeTun = &NativeTun{
++			tunFile:   tunFile,
++			options:   options,
++			tunResolv: resolvString,
++		}
++	} else {
++		tunFd = options.FileDescriptor
++		nativeTun = &NativeTun{
++			tunFile: os.NewFile(uintptr(tunFd), "utun"),
++			options: options,
++		}
++	}
++
++	if len(options.Inet4Address) > 0 {
++		nativeTun.inet4Address = options.Inet4Address[0].Addr().As4()
++	}
++	if len(options.Inet6Address) > 0 {
++		nativeTun.inet6Address = options.Inet6Address[0].Addr().As16()
++	}
++	return nativeTun, nil
++}
++
++func (t *NativeTun) Start() error {
++	t.options.InterfaceMonitor.RegisterMyInterface(t.options.Name)
++	return t.setRoutes()
++}
++
++func (t *NativeTun) Close() error {
++	if t.options.AutoRoute {
++		return E.Errors(restoreDNSServers(t.tunResolv), t.unsetRoutes(), t.tunFile.Close())
++	}
++	return E.Errors(t.unsetRoutes(), t.tunFile.Close())
++}
++
++func (t *NativeTun) Read(p []byte) (n int, err error) {
++	return t.tunFile.Read(p)
++}
++
++func (t *NativeTun) Write(p []byte) (n int, err error) {
++	//To prevent "address family not supported by protocol family"
++	switch uint(p[3]) {
++	case unix.AF_INET:
++		copy(p[:4], packetHeader4[:])
++	case unix.AF_INET6:
++		copy(p[:4], packetHeader6[:])
++	}
++	return t.tunFile.Write(p)
++}
++
++var (
++	packetHeader4 = [4]byte{0x00, 0x00, 0x00, unix.AF_INET}
++	packetHeader6 = [4]byte{0x00, 0x00, 0x00, unix.AF_INET6}
++)
++
++func (t *NativeTun) WriteVectorised(buffers []*buf.Buffer) error {
++	var packetHeader []byte
++	switch header.IPVersion(buffers[0].Bytes()) {
++	case header.IPv4Version:
++		packetHeader = packetHeader4[:]
++	case header.IPv6Version:
++		packetHeader = packetHeader6[:]
++	}
++	// syscall.SYS_WRITEV is not implemented
++	newBuffers := append([]*buf.Buffer{buf.As(packetHeader)}, buffers...)
++	var newByte []byte
++	for _, buffer := range newBuffers {
++		newByte = append(newByte, buffer.Bytes()...)
++	}
++	_, err := t.tunFile.Write(newByte)
++	return err
++}
++
++const (
++	SIOCAIFADDR_IN6       = 2155899162
++	IN6_IFF_NODAD         = 0x0020
++	ND6_INFINITE_LIFETIME = 0xFFFFFFFF
++)
++
++type IfreqMTU struct {
++	Name [unix.IFNAMSIZ]byte
++	MTU  int32
++}
++
++type ifAliasReq struct {
++	Name    [unix.IFNAMSIZ]byte
++	Addr    unix.RawSockaddrInet4
++	Dstaddr unix.RawSockaddrInet4
++	Mask    unix.RawSockaddrInet4
++}
++
++type ifAliasReq6 struct {
++	Name     [16]byte
++	Addr     unix.RawSockaddrInet6
++	Dstaddr  unix.RawSockaddrInet6
++	Mask     unix.RawSockaddrInet6
++	Flags    uint32
++	Lifetime addrLifetime6
++}
++
++type addrLifetime6 struct {
++	Expire    float64
++	Preferred float64
++	Vltime    uint32
++	Pltime    uint32
++}
++
++func getTUnName(tunFile *os.File) (string, error) {
++	gostat, err := tunFile.Stat()
++	if err != nil {
++		return "", err
++	}
++	stat := gostat.Sys().(*syscall.Stat_t)
++	return fmt.Sprintf("tun%d", stat.Rdev%256), nil
++}
++
++func configure(name string, options Options) error {
++	err := useSocket(unix.AF_INET, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0, func(socketFd int) error {
++		var ifr IfreqMTU
++		copy(ifr.Name[:], name)
++		ifr.MTU = int32(options.MTU)
++		_, _, errno := unix.Syscall(
++			syscall.SYS_IOCTL,
++			uintptr(socketFd),
++			uintptr(unix.SIOCSIFMTU),
++			uintptr(unsafe.Pointer(&ifr)),
++		)
++		if errno != 0 {
++			return os.NewSyscallError("SIOCSIFMTU", errno)
++		}
++		return nil
++	})
++	if err != nil {
++		return err
++	}
++
++	if len(options.Inet4Address) > 0 {
++		for _, address := range options.Inet4Address {
++			ifReq := ifAliasReq{
++				Addr: unix.RawSockaddrInet4{
++					Len:    unix.SizeofSockaddrInet4,
++					Family: unix.AF_INET,
++					Addr:   address.Addr().As4(),
++				},
++				Dstaddr: unix.RawSockaddrInet4{
++					Len:    unix.SizeofSockaddrInet4,
++					Family: unix.AF_INET,
++					Addr:   address.Addr().As4(),
++				},
++				Mask: unix.RawSockaddrInet4{
++					Len:    unix.SizeofSockaddrInet4,
++					Family: unix.AF_INET,
++					Addr:   netip.MustParseAddr(net.IP(net.CIDRMask(address.Bits(), 32)).String()).As4(),
++				},
++			}
++			copy(ifReq.Name[:], name)
++			err = useSocket(unix.AF_INET, unix.SOCK_DGRAM, 0, func(socketFd int) error {
++				if _, _, errno := unix.Syscall(
++					syscall.SYS_IOCTL,
++					uintptr(socketFd),
++					uintptr(unix.SIOCAIFADDR),
++					uintptr(unsafe.Pointer(&ifReq)),
++				); errno != 0 {
++					return os.NewSyscallError("SIOCAIFADDR", errno)
++				}
++				return nil
++			})
++			if err != nil {
++				return err
++			}
++		}
++	}
++	if len(options.Inet6Address) > 0 {
++		for _, address := range options.Inet6Address {
++			ifReq6 := ifAliasReq6{
++				Addr: unix.RawSockaddrInet6{
++					Len:    unix.SizeofSockaddrInet6,
++					Family: unix.AF_INET6,
++					Addr:   address.Addr().As16(),
++				},
++				Mask: unix.RawSockaddrInet6{
++					Len:    unix.SizeofSockaddrInet6,
++					Family: unix.AF_INET6,
++					Addr:   netip.MustParseAddr(net.IP(net.CIDRMask(address.Bits(), 128)).String()).As16(),
++				},
++				Flags: IN6_IFF_NODAD,
++				Lifetime: addrLifetime6{
++					Vltime: ND6_INFINITE_LIFETIME,
++					Pltime: ND6_INFINITE_LIFETIME,
++				},
++			}
++			if address.Bits() == 128 {
++				ifReq6.Dstaddr = unix.RawSockaddrInet6{
++					Len:    unix.SizeofSockaddrInet6,
++					Family: unix.AF_INET6,
++					Addr:   address.Addr().Next().As16(),
++				}
++			}
++			copy(ifReq6.Name[:], name)
++			err = useSocket(unix.AF_INET6, unix.SOCK_DGRAM, 0, func(socketFd int) error {
++				if _, _, errno := unix.Syscall(
++					syscall.SYS_IOCTL,
++					uintptr(socketFd),
++					uintptr(SIOCAIFADDR_IN6),
++					uintptr(unsafe.Pointer(&ifReq6)),
++				); errno != 0 {
++					return os.NewSyscallError("SIOCAIFADDR_IN6", errno)
++				}
++				return nil
++			})
++			if err != nil {
++				return err
++			}
++		}
++	}
++	return nil
++}
++
++const resolvPath = "/etc/resolv.conf"
++const dhcpleasedPath = "/etc/dhcpleased.conf"
++
++func checkDHCP(name string) error {
++	_, err := exec.Command("rcctl", "check", "dhcpleased").CombinedOutput()
++	if err != nil {
++		return nil
++	}
++
++	ErrNoIgnoreDNS := fmt.Errorf("please add `ignore dns` option for interface %s in %s", name, dhcpleasedPath)
++	file, err := os.OpenFile(dhcpleasedPath, os.O_RDONLY, 0644)
++	if err != nil {
++		if errors.Is(err, os.ErrNotExist) {
++			return ErrNoIgnoreDNS
++		}
++		return err
++	}
++	defer file.Close()
++	reader := bufio.NewReader(file)
++	var sb strings.Builder
++	for {
++		line, err := reader.ReadString('\n')
++		line = strings.TrimSpace(line)
++		if err != nil {
++			if err != io.EOF {
++				return err
++			}
++			if len(line) == 0 {
++				break
++			}
++		}
++		if len(line) == 0 || line[0] == '#' {
++			continue
++		}
++		sb.WriteString(line)
++	}
++	dhcpleasedString := sb.String()
++	containIf := strings.Contains(dhcpleasedString, fmt.Sprintf("interface %s", name))
++	containIgnore := strings.Contains(dhcpleasedString, "ignore dns")
++	if !(containIf && containIgnore) {
++		return ErrNoIgnoreDNS
++	}
++	return nil
++}
++
++func setDNSServers(options Options) (string, error) {
++	resolvByte, err := os.ReadFile(resolvPath)
++	if err != nil {
++		return "", err
++	}
++	resolvString := unix.ByteSliceToString(resolvByte[:])
++	var sb strings.Builder
++	sb.WriteString("search localdomain\n")
++	if len(options.Inet4Address) > 0 {
++		sb.WriteString(fmt.Sprintf("nameserver %s\n", options.Inet4Address[0].Addr().Next().String()))
++	}
++	if len(options.Inet6Address) > 0 {
++		sb.WriteString(fmt.Sprintf("nameserver %s\n", options.Inet6Address[0].Addr().Next().String()))
++	}
++	newResolvByte := []byte(sb.String())
++	err = os.WriteFile(resolvPath, newResolvByte[:], 0644)
++	if err != nil {
++		return resolvString, err
++	}
++	return resolvString, nil
++}
++
++func restoreDNSServers(resolvString string) error {
++	resolvByte := []byte(resolvString)
++	err := os.WriteFile(resolvPath, resolvByte[:], 0644)
++	if err != nil {
++		return err
++	}
++	return nil
++}
++
++func (t *NativeTun) UpdateRouteOptions(tunOptions Options) error {
++	err := t.unsetRoutes()
++	if err != nil {
++		return err
++	}
++	t.options = tunOptions
++	return t.setRoutes()
++}
++
++func (t *NativeTun) setRoutes() error {
++	if t.options.FileDescriptor == 0 {
++		var routeRanges = []netip.Prefix{}
++		if len(t.options.Inet4Address) > 0 {
++			routeRanges = append(routeRanges, t.options.Inet4Address[0])
++		}
++		if len(t.options.Inet6Address) > 0 {
++			routeRanges = append(routeRanges, t.options.Inet6Address[0])
++		}
++		autoRouteRanges, err := t.options.BuildAutoRouteRanges(false)
++		if err != nil {
++			return err
++		}
++		routeRanges = append(routeRanges, autoRouteRanges...)
++		if len(routeRanges) > 0 {
++			gateway4, gateway6 := t.options.Inet4GatewayAddr(), t.options.Inet6GatewayAddr()
++			for _, destination := range routeRanges {
++				var gateway netip.Addr
++				if destination.Addr().Is4() {
++					gateway = gateway4
++				} else {
++					gateway = gateway6
++				}
++				err = execRoute(unix.RTM_ADD, destination, gateway)
++				if err != nil {
++					if errors.Is(err, unix.EEXIST) {
++						err = execRoute(unix.RTM_DELETE, destination, gateway)
++						if err != nil {
++							return E.Cause(err, "remove existing route: ", destination)
++						}
++						err = execRoute(unix.RTM_ADD, destination, gateway)
++						if err != nil {
++							return E.Cause(err, "re-add route: ", destination)
++						}
++					} else {
++						return E.Cause(err, "add route: ", destination)
++					}
++				}
++			}
++			t.routeSet = true
++		}
++	}
++	return nil
++}
++
++func (t *NativeTun) unsetRoutes() error {
++	if !t.routeSet {
++		return nil
++	}
++	routeRanges, err := t.options.BuildAutoRouteRanges(false)
++	if err != nil {
++		return err
++	}
++	gateway4, gateway6 := t.options.Inet4GatewayAddr(), t.options.Inet6GatewayAddr()
++	for _, destination := range routeRanges {
++		var gateway netip.Addr
++		if destination.Addr().Is4() {
++			gateway = gateway4
++		} else {
++			gateway = gateway6
++		}
++		err = execRoute(unix.RTM_DELETE, destination, gateway)
++		if err != nil {
++			err = E.Errors(err, E.Cause(err, "delete route: ", destination))
++		}
++	}
++	return err
++}
++
++func useSocket(domain, typ, proto int, block func(socketFd int) error) error {
++	socketFd, err := unix.Socket(domain, typ, proto)
++	if err != nil {
++		return err
++	}
++	defer unix.Close(socketFd)
++	return block(socketFd)
++}
++
++func execRoute(rtmType int, destination netip.Prefix, gateway netip.Addr) error {
++	routeMessage := route.RouteMessage{
++		Type:    rtmType,
++		Version: unix.RTM_VERSION,
++		Flags:   unix.RTF_STATIC | unix.RTF_GATEWAY,
++		Seq:     1,
++	}
++	if rtmType == unix.RTM_ADD {
++		routeMessage.Flags |= unix.RTF_UP
++	}
++	if gateway.Is4() {
++		routeMessage.Addrs = []route.Addr{
++			syscall.RTAX_DST:     &route.Inet4Addr{IP: destination.Addr().As4()},
++			syscall.RTAX_NETMASK: &route.Inet4Addr{IP: netip.MustParseAddr(net.IP(net.CIDRMask(destination.Bits(), 32)).String()).As4()},
++			syscall.RTAX_GATEWAY: &route.Inet4Addr{IP: gateway.As4()},
++		}
++	} else {
++		routeMessage.Addrs = []route.Addr{
++			syscall.RTAX_DST:     &route.Inet6Addr{IP: destination.Addr().As16()},
++			syscall.RTAX_NETMASK: &route.Inet6Addr{IP: netip.MustParseAddr(net.IP(net.CIDRMask(destination.Bits(), 128)).String()).As16()},
++			syscall.RTAX_GATEWAY: &route.Inet6Addr{IP: gateway.As16()},
++		}
++	}
++	request, err := routeMessage.Marshal()
++	if err != nil {
++		return err
++	}
++	return useSocket(unix.AF_ROUTE, unix.SOCK_RAW, 0, func(socketFd int) error {
++		return common.Error(unix.Write(socketFd, request))
++	})
++}
 diff --git a/tun_other.go b/tun_other.go
 index 1db48f9..d8fb2e1 100644
 --- a/tun_other.go

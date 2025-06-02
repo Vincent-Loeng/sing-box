@@ -366,6 +366,78 @@ index 0000000..daa30d7
 +	destination = netip.AddrPortFrom(M.AddrFromIP(ip), port)
 +	return
 +}
+diff --git a/common/redir/redir_openbsd.go b/common/redir/redir_openbsd.go
+new file mode 100644
+index 0000000..fbad228
+--- /dev/null
++++ b/common/redir/redir_openbsd.go
+@@ -0,0 +1,66 @@
++package redir
++
++import (
++	"encoding/binary"
++	"net"
++	"net/netip"
++	"syscall"
++	"unsafe"
++
++	M "github.com/sagernet/sing/common/metadata"
++)
++
++const (
++	PF_IN       = 0x1
++	PF_OUT      = 0x2
++	DIOCNATLOOK = 0xc0504417
++)
++
++func GetOriginalDestination(conn net.Conn) (destination netip.AddrPort, err error) {
++	fd, err := syscall.Open("/dev/pf", 0, syscall.O_RDWR)
++	if err != nil {
++		return netip.AddrPort{}, err
++	}
++	defer syscall.Close(fd)
++	nl := struct {
++		saddr, daddr, rsaddr, rdaddr                    [16]byte
++		rdomain, rrdomain, sport, dport, rsport, rdport [2]byte
++		af, proto, direction                            uint8
++	}{
++		af:        syscall.AF_INET,
++		proto:     syscall.IPPROTO_TCP,
++		direction: PF_OUT,
++	}
++	la := conn.LocalAddr().(*net.TCPAddr)
++	ra := conn.RemoteAddr().(*net.TCPAddr)
++	raIP, laIP := ra.IP, la.IP
++	raPort, laPort := ra.Port, la.Port
++	switch {
++	case raIP.To4() != nil:
++		copy(nl.saddr[:net.IPv4len], raIP.To4())
++		copy(nl.daddr[:net.IPv4len], laIP.To4())
++		nl.af = syscall.AF_INET
++	default:
++		copy(nl.saddr[:], raIP.To16())
++		copy(nl.daddr[:], laIP.To16())
++		nl.af = syscall.AF_INET6
++	}
++	binary.BigEndian.PutUint16(nl.sport[:], uint16(raPort))
++	binary.BigEndian.PutUint16(nl.dport[:], uint16(laPort))
++	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), DIOCNATLOOK, uintptr(unsafe.Pointer(&nl))); errno != 0 {
++		return netip.AddrPort{}, errno
++	}
++
++	var ip net.IP
++	switch nl.af {
++	case syscall.AF_INET:
++		ip = make(net.IP, net.IPv4len)
++		copy(ip, nl.rdaddr[:net.IPv4len])
++	case syscall.AF_INET6:
++		ip = make(net.IP, net.IPv6len)
++		copy(ip, nl.rdaddr[:])
++	}
++	port := binary.BigEndian.Uint16(nl.rdport[:])
++	destination = netip.AddrPortFrom(M.AddrFromIP(ip), port)
++	return
++}
 diff --git a/common/redir/redir_other.go b/common/redir/redir_other.go
 index 3d60afe..3ee166d 100644
 --- a/common/redir/redir_other.go
