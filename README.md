@@ -11,9 +11,9 @@ This self-use fork provides executable files for _**386, amd64, arm, and arm64**
 
 自用分支，提供 _**386、amd64、arm和arm64**_ 等架构的可执行文件
 
-This repo automatically builds the latest FreeBSD version of sing-box with patches, and the latest OpenBSD version is [1.12.0-beta.19-vincent-1](https://github.com/Vincent-Loeng/sing-box/releases/tag/1.12.0-beta.19-vincent-1)
+This repo automatically builds the latest version of sing-box with patches
 
-此仓库自动应用补丁并构建最新的 sing-box FreeBSD 版本，另外，最新的 OpenBSD 版本是 [1.12.0-beta.19-vincent-1](https://github.com/Vincent-Loeng/sing-box/releases/tag/1.12.0-beta.19-vincent-1)
+此仓库自动应用补丁并构建 sing-box 最新的版本
 
 ## Another tool 另一工具 [**mihomo for FreeBSD**](https://github.com/Vincent-Loeng/mihomo)
 
@@ -28,9 +28,9 @@ This repo automatically builds the latest FreeBSD version of sing-box with patch
 
    自 1.12.0-beta.15-vincent-2 起，FreeBSD 支持进程匹配
 
-3. Redirect (IPFW/PF) is supported on FreeBSD since 1.12.0-beta.20-vincent-auto
+3. Redirect is supported on FreeBSD/OpenBSD since 1.12.0-beta.20-vincent-auto
 
-   自 1.12.0-beta.20-vincent-auto 起，FreeBSD 支持 redirect (IPFW/PF)
+   自 1.12.0-beta.20-vincent-auto 起，FreeBSD/OpenBSD 支持 redirect
 
 
 ## TO-DO 待做事项
@@ -42,7 +42,9 @@ This repo automatically builds the latest FreeBSD version of sing-box with patch
 
 ## Known issues 已知问题
 
-1. Loops may happen on OpenBSD    可能出现环路
+1. Loops may happen on OpenBSD, the workround is listed in the Notes and Examples section
+
+   OpenBSD上可能出现环路，绕过方法在注意事项及模板里
 
 
 ## Notes 注意事项
