@@ -38,19 +38,6 @@ index f7a8532..c19acad 100644
  
  fmt:
  	@gofumpt -l -w .
-diff --git a/README.md b/README.md
-index 6a8a9c0..d26921b 100644
---- a/README.md
-+++ b/README.md
-@@ -2,7 +2,7 @@
- 
- Simple transparent proxy library.
- 
--For Linux, Windows, macOS and iOS.
-+For Linux, Windows, macOS, iOS and FreeBSD.
- 
- ## License
- 
 diff --git a/monitor_other.go b/monitor_other.go
 index c6b447c..398b31c 100644
 --- a/monitor_other.go
@@ -1350,7 +1337,7 @@ index 1db48f9..d8fb2e1 100644
  package tun
  
 diff --git a/tun_rules.go b/tun_rules.go
-index c1b983f..6832471 100644
+index c1b983f..56f7a0e 100644
 --- a/tun_rules.go
 +++ b/tun_rules.go
 @@ -104,7 +104,8 @@ func buildExcludedRanges(includeRanges []ranges.Range[uint32], excludeRanges []r
@@ -1359,7 +1346,7 @@ index c1b983f..6832471 100644
  
 -const autoRouteUseSubRanges = runtime.GOOS == "darwin"
 +const autoRouteUseSubRanges = runtime.GOOS == "darwin" || runtime.GOOS == "freebsd"
-+const autoRouteUseFakeIPRanges = runtime.GOOS == "openbsd"
++const autoRouteUseFakeIPRanges = runtime.GOOS == "openbsd" || runtime.GOOS == "dragonfly" || runtime.GOOS == "netbsd"
  
  func (o *Options) BuildAutoRouteRanges(underNetworkExtension bool) ([]netip.Prefix, error) {
  	var routeRanges []netip.Prefix
