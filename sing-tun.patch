@@ -115,7 +115,7 @@ index b0f573a..7e1a951 100644
  			if !o.InterfaceScope {
 diff --git a/tun_freebsd.go b/tun_freebsd.go
 new file mode 100644
-index 0000000..c755bc8
+index 0000000..2c3b95b
 --- /dev/null
 +++ b/tun_freebsd.go
 @@ -0,0 +1,716 @@
@@ -173,7 +173,7 @@ index 0000000..c755bc8
 +			return nil, E.New("interface name too long: ", options.Name)
 +		}
 +
-+		// For OPNsense
++		// Weird error happens when using pf
 +		if options.Name == "tun" {
 +			return nil, E.New("bad tun name: ", options.Name)
 +		}
