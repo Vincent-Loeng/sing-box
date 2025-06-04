@@ -61,7 +61,11 @@ This repo automatically builds the latest version of sing-box with patches
 
    在 pfSense/OPNsense 上使用`system`栈时，请允许数据包通过
 
-4. Please use `FakeIP` to avoid loops when using OpenBSD
+4. Redirect provides higher performance (better than tun)
+
+   相比 tun, redirect 性能更好
+
+5. Please use `FakeIP` to avoid loops when using OpenBSD
 
    使用 OpenBSD 时，请用`FakeIP`避免环路
 
