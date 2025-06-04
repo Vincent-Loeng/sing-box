@@ -448,6 +448,18 @@ index 3d60afe..3ee166d 100644
  
  package redir
  
+diff --git a/go.mod b/go.mod
+index 3f43196..c4d1b29 100644
+--- a/go.mod
++++ b/go.mod
+@@ -57,6 +57,7 @@ require (
+ )
+ 
+ //replace github.com/sagernet/sing => ../sing
++replace github.com/sagernet/sing-tun v0.6.6-0.20250428031943-0686f8c4f210 => ../sing-tun
+ 
+ require (
+ 	filippo.io/edwards25519 v1.1.0 // indirect
 diff --git a/option/tun.go b/option/tun.go
 index 9263dd1..48bebf6 100644
 --- a/option/tun.go

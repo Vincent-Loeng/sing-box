@@ -102,10 +102,10 @@ index b0f573a..7e1a951 100644
  			if !o.InterfaceScope {
 diff --git a/tun_freebsd.go b/tun_freebsd.go
 new file mode 100644
-index 0000000..2c3b95b
+index 0000000..37b8092
 --- /dev/null
 +++ b/tun_freebsd.go
-@@ -0,0 +1,716 @@
+@@ -0,0 +1,719 @@
 +/* SPDX-License-Identifier: MIT
 + *
 + * Copyright (C) 2017-2023 WireGuard LLC. All Rights Reserved.
@@ -497,7 +497,10 @@ index 0000000..2c3b95b
 +	}
 +	if defaultGateway6 != "" {
 +		interfaceName := options.InterfaceMonitor.DefaultInterface().Name
-+		err = runCommand(fmt.Sprintf("setfib %d route add -inet6 default %s%%%s", fibSize-1, defaultGateway6, interfaceName))
++		err = runCommand(fmt.Sprintf(
++			"setfib %d route add -inet6 default %s%%%s",
++			fibSize-1, defaultGateway6, interfaceName,
++		))
 +		if err != nil {
 +			return err
 +		}

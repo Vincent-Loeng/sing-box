@@ -24,7 +24,7 @@ sed -i 's|DarwinEndpoint|FreeBSDEndpoint|g;s|darwin|freebsd|g' tun_freebsd_gviso
 #sed -i 's|DarwinEndpoint|DragonFlyEndpoint|g;s|darwin|dragonfly|g' tun_dragonfly_gvisor.go
 git diff HEAD > ../mihomo/sing-tun.patch
 
-os='openbsd'
+os='freebsd'
 arch='amd64'
 sb_version='1.12.0-beta-vincent'
 tags='with_gvisor,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_quic'
