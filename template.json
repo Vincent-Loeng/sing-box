@@ -30,6 +30,8 @@
     },
     // redirect inbound available since 1.12.0-beta.20-vincent-auto
     // 自 1.12.0-beta.20-vincent-auto 起，redirect 入站可用
+    // Please add port forwarding rules when using redirect (higher performance)
+    // 使用 redirect（性能更好）时，请添加端口转发规则
     {
       "type": "redirect",
       "tag": "redirect-in",
