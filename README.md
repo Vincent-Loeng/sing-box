@@ -39,7 +39,7 @@ Please refer to the given [template](template.json) (1.12)
 
 ## Known issues 已知问题
 
-1. Loops may happen on OpenBSD, the workround is listed in the template
+1. Loops may happen on OpenBSD, the workround is shown in the template
 
    OpenBSD上可能出现环路，绕过方法在模板里
 
