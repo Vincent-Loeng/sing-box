@@ -7,13 +7,10 @@
 
 # sing-box for FreeBSD/OpenBSD (with tun support)
 
-This self-use fork provides executable files for _**386, amd64, arm, and arm64**_
+This self-use repo automatically builds the latest version of sing-box with patches
 
-自用分支，提供 _**386、amd64、arm和arm64**_ 等架构的可执行文件
+此自用仓库自动应用补丁并构建 sing-box 最新的版本
 
-This repo automatically builds the latest version of sing-box with patches
-
-此仓库自动应用补丁并构建 sing-box 最新的版本
 
 ## Another tool 另一工具 [**mihomo for FreeBSD**](https://github.com/Vincent-Loeng/mihomo)
 
@@ -33,11 +30,11 @@ This repo automatically builds the latest version of sing-box with patches
    自 1.12.0-beta.20-vincent-auto 起，FreeBSD/OpenBSD 支持 redirect
 
 
-## TO-DO 待做事项
+## Examples 示例
 
-1. (**It depends on my time**) `set_system_proxy`
+Please refer to the given [template](template.json) (1.12)
 
-2. (**It depends on my time**) `auto_redirect`
+请参考提供的[模板](template.json)（1.12）
 
 
 ## Known issues 已知问题
@@ -49,11 +46,7 @@ This repo automatically builds the latest version of sing-box with patches
 
 ## Notes 注意事项
 
-1. The value of `auto_detect_interface` should be `false` since 1.12.0-beta.15-vincent-2, which does not affect tun interfaces
-
-   自 1.12.0-beta.15-vincent-2 起，`auto_detect_interface`的值应该设为`false`，不影响 tun 网卡
-
-2. Please configure DNS servers manually when using automatic routing on OPNsense
+1. Please configure DNS servers manually when using automatic routing on OPNsense
 
    在 OPNsense 上使用自动路由时，请手动配置 DNS 服务器
 
@@ -61,20 +54,13 @@ This repo automatically builds the latest version of sing-box with patches
 
    在 pfSense/OPNsense 上使用`system`栈时，请允许数据包通过
 
-4. Please add port forwarding rules when using redirect (higher performance)
+4. Please add port forwarding rules when using `redirect` (higher performance)
 
-   使用 redirect（性能更好）时，请添加端口转发规则
+   使用 `redirect`（性能更好）时，请添加端口转发规则
 
 5. Please use `FakeIP` to avoid loops when using OpenBSD
 
    使用 OpenBSD 时，请用`FakeIP`避免环路
-
-
-## Examples 示例
-
-Please refer to the given [template](template.json) (1.12)
-
-请参考提供的[模板](template.json)（1.12）
 
 ---
 
