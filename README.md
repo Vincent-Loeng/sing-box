@@ -39,9 +39,9 @@ Please refer to the given [template](template.json) (1.12)
 
 ## Known issues 已知问题
 
-1. Loops may happen on OpenBSD, the workround is listed in the Notes and Examples section
+1. Loops may happen on OpenBSD, the workround is listed in the template
 
-   OpenBSD上可能出现环路，绕过方法在注意事项及模板里
+   OpenBSD上可能出现环路，绕过方法在模板里
 
 
 ## Notes 注意事项
@@ -57,10 +57,6 @@ Please refer to the given [template](template.json) (1.12)
 4. Please add port forwarding rules when using `redirect` (higher performance)
 
    使用 `redirect`（性能更好）时，请添加端口转发规则
-
-5. Please use `FakeIP` to avoid loops when using OpenBSD
-
-   使用 OpenBSD 时，请用`FakeIP`避免环路
 
 ---
 
