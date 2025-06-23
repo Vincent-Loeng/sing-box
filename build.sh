@@ -27,8 +27,8 @@ git diff HEAD > ../mihomo/sing-tun.patch
 os='freebsd'
 arch='amd64'
 sb_version='1.12.0-beta-vincent'
-tags='with_gvisor,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_quic'
-dragonfly_tags='with_gvisor,with_dhcp,with_utls,with_acme,with_clash_api,with_quic'
+tags='with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale'
+dragonfly_tags='with_gvisor,with_quic,with_dhcp,with_utls,with_acme,with_clash_api'
 cd ../sing-box-official
 git diff HEAD > ../sing-box/sing-box.patch
 if [ ${os} == "dragonfly" ]; then
