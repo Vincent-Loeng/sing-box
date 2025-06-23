@@ -1,6 +1,6 @@
 diff --git a/common/process/searcher_freebsd.go b/common/process/searcher_freebsd.go
 new file mode 100644
-index 0000000..4051c98
+index 00000000..4051c98c
 --- /dev/null
 +++ b/common/process/searcher_freebsd.go
 @@ -0,0 +1,251 @@
@@ -256,7 +256,7 @@ index 0000000..4051c98
 +	return nil
 +}
 diff --git a/common/process/searcher_stub.go b/common/process/searcher_stub.go
-index 4665d91..1464efb 100644
+index 4665d91f..1464efb1 100644
 --- a/common/process/searcher_stub.go
 +++ b/common/process/searcher_stub.go
 @@ -1,4 +1,4 @@
@@ -267,7 +267,7 @@ index 4665d91..1464efb 100644
  
 diff --git a/common/redir/redir_freebsd.go b/common/redir/redir_freebsd.go
 new file mode 100644
-index 0000000..daa30d7
+index 00000000..daa30d74
 --- /dev/null
 +++ b/common/redir/redir_freebsd.go
 @@ -0,0 +1,95 @@
@@ -368,7 +368,7 @@ index 0000000..daa30d7
 +}
 diff --git a/common/redir/redir_openbsd.go b/common/redir/redir_openbsd.go
 new file mode 100644
-index 0000000..fbad228
+index 00000000..fbad2284
 --- /dev/null
 +++ b/common/redir/redir_openbsd.go
 @@ -0,0 +1,66 @@
@@ -439,7 +439,7 @@ index 0000000..fbad228
 +	return
 +}
 diff --git a/common/redir/redir_other.go b/common/redir/redir_other.go
-index 3d60afe..3ee166d 100644
+index 3d60afeb..3ee166dd 100644
 --- a/common/redir/redir_other.go
 +++ b/common/redir/redir_other.go
 @@ -1,4 +1,4 @@
@@ -448,20 +448,8 @@ index 3d60afe..3ee166d 100644
  
  package redir
  
-diff --git a/go.mod b/go.mod
-index 3f43196..c4d1b29 100644
---- a/go.mod
-+++ b/go.mod
-@@ -57,6 +57,7 @@ require (
- )
- 
- //replace github.com/sagernet/sing => ../sing
-+replace github.com/sagernet/sing-tun v0.6.6-0.20250428031943-0686f8c4f210 => ../sing-tun
- 
- require (
- 	filippo.io/edwards25519 v1.1.0 // indirect
 diff --git a/option/tun.go b/option/tun.go
-index 9263dd1..48bebf6 100644
+index 89affb23..7ca2e237 100644
 --- a/option/tun.go
 +++ b/option/tun.go
 @@ -17,6 +17,7 @@ type TunInboundOptions struct {
@@ -473,7 +461,7 @@ index 9263dd1..48bebf6 100644
  	AutoRedirectInputMark  FwMark                           `json:"auto_redirect_input_mark,omitempty"`
  	AutoRedirectOutputMark FwMark                           `json:"auto_redirect_output_mark,omitempty"`
 diff --git a/protocol/tun/inbound.go b/protocol/tun/inbound.go
-index 7c80ebb..d6c10a0 100644
+index 36714abe..50d15490 100644
 --- a/protocol/tun/inbound.go
 +++ b/protocol/tun/inbound.go
 @@ -18,7 +18,7 @@ import (
@@ -503,4 +491,4 @@ index 7c80ebb..d6c10a0 100644
 +			FIBIndex:                 fibIndex,
  			AutoRedirectInputMark:    inputMark,
  			AutoRedirectOutputMark:   outputMark,
- 			StrictRoute:              options.StrictRoute,
+ 			Inet4LoopbackAddress:     common.Filter(options.LoopbackAddress, netip.Addr.Is4),
