@@ -461,18 +461,9 @@ index 89affb23..7ca2e237 100644
  	AutoRedirectInputMark  FwMark                           `json:"auto_redirect_input_mark,omitempty"`
  	AutoRedirectOutputMark FwMark                           `json:"auto_redirect_output_mark,omitempty"`
 diff --git a/protocol/tun/inbound.go b/protocol/tun/inbound.go
-index 36714abe..50d15490 100644
+index 36714abe..003319f3 100644
 --- a/protocol/tun/inbound.go
 +++ b/protocol/tun/inbound.go
-@@ -18,7 +18,7 @@ import (
- 	"github.com/sagernet/sing-box/experimental/libbox/platform"
- 	"github.com/sagernet/sing-box/log"
- 	"github.com/sagernet/sing-box/option"
--	"github.com/sagernet/sing-tun"
-+	tun "github.com/sagernet/sing-tun"
- 	"github.com/sagernet/sing/common"
- 	E "github.com/sagernet/sing/common/exceptions"
- 	"github.com/sagernet/sing/common/json/badoption"
 @@ -164,6 +164,10 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
  	if ruleIndex == 0 {
  		ruleIndex = tun.DefaultIPRoute2RuleIndex
