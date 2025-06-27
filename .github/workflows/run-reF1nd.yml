@@ -1,0 +1,119 @@
+name: Build reF1nd
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "00 23 * * *"
+  push:
+    branches:
+      - master
+      - hidden
+    paths-ignore:
+      - "**/README.md"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set variables
+        run: |
+          echo "RELEASE_NAME=reF1nd-vincent-$(date +%Y%m%d)" >> $GITHUB_ENV
+          echo "TAG_NAME=reF1nd-vincent-$(date +%Y%m%d)" >> $GITHUB_ENV
+          echo "tags=with_gvisor,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_quic" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Checkout the "hidden" branch
+        uses: actions/checkout@v4
+        with:
+          ref: hidden
+
+      - name: Apply patches
+        #if: ${{ env.BUILD == 'true' }}
+        run: |
+          git clone --depth 1 https://github.com/Sagernet/sing-tun.git sing-tun
+          git clone --depth 1 https://github.com/reF1nd/sing-box.git sing-box
+          ls -lha
+          cd sing-tun
+          patch -p1 < ../sing-tun.patch
+          cp monitor_darwin.go monitor_freebsd.go
+          cp tun_darwin_gvisor.go tun_freebsd_gvisor.go
+          sed -i 's|DarwinEndpoint|FreeBSDEndpoint|g;s|darwin|freebsd|g' tun_freebsd_gvisor.go
+          cp monitor_darwin.go monitor_openbsd.go
+          cp tun_darwin_gvisor.go tun_openbsd_gvisor.go
+          sed -i 's|DarwinEndpoint|OpenBSDEndpoint|g;s|darwin|openbsd|g' tun_openbsd_gvisor.go
+          cd ../sing-box
+          git checkout reF1nd
+          patch -p1 < ../sing-box.patch
+          sing_tun_version=$(cat go.mod | grep github.com/sagernet/sing-tun | awk '{ print $2 }')
+          echo -e "\nreplace github.com/sagernet/sing-tun ${sing_tun_version} => ../sing-tun" >> go.mod
+          git_head=$(git rev-parse --short HEAD)
+          echo "version=reF1nd-${git_head}-vincent" >> $GITHUB_ENV
+
+      - name: Check for new version
+        run: |
+          if [ -f last_reF1nd_version ]; then
+            LAST_VERSION=$(cat last_reF1nd_version)
+          else
+            LAST_VERSION="none"
+          fi
+          echo "Last version: ${LAST_VERSION}, current version: ${{ env.version }}"
+          if [ "${{ env.version }}" != "${LAST_VERSION}" ]; then
+            echo "${{ env.version }}" > last_version
+            echo "BUILD=true" >> $GITHUB_ENV
+          else
+            echo "BUILD=false" >> $GITHUB_ENV
+          fi
+
+      - name: Setup Go
+        if: ${{ env.BUILD == 'true' }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ^1.24.3
+
+      - name: Build binary files
+        if: ${{ env.BUILD == 'true' }}
+        run: |
+          cd sing-box
+          os_array=(freebsd openbsd)
+          arch_array=(amd64 386 arm arm64)
+          for os in ${os_array[@]}; do
+            for arch in ${arch_array[@]}; do
+              GOOS=${os} GOARCH=${arch} CGO_ENABLED=0 go build -v -trimpath -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ env.version }}' -s -w -buildid=" -tags ${tags} ./cmd/sing-box
+              mv sing-box sing-box-reF1nd-${os}-${arch}
+            done
+          done
+
+      - name: Move files to publish directory
+        if: ${{ env.BUILD == 'true' }}
+        run: |
+          mkdir -p publish
+          cp sing-box/sing-box-* ./publish/
+
+      - name: Release and upload assets
+        if: ${{ env.BUILD == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ env.RELEASE_NAME }}
+          tag_name: ${{ env.TAG_NAME }}
+          draft: false
+          prerelease: false
+          files: |
+            ./publish/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push last_version to "hidden" branch
+        if: ${{ env.BUILD == 'true' }}
+        run: |
+          git config --local user.name "Vincent Loeng"
+          git config --local user.email "173226116+Vincent-Loeng@users.noreply.github.com"
+          git add last_version
+          git commit -m "Release ${{ env.RELEASE_NAME }}"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete old workflow runs
+        uses: Mattraks/delete-workflow-runs@main
+        with:
+          retain_days: 3
+          keep_minimum_runs: 6
