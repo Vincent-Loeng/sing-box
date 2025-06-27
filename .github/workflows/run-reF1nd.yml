@@ -30,7 +30,7 @@ jobs:
         #if: ${{ env.BUILD == 'true' }}
         run: |
           git clone --depth 1 https://github.com/Sagernet/sing-tun.git sing-tun
-          git clone --depth 1 https://github.com/reF1nd/sing-box.git sing-box
+          git clone --depth 1 -b reF1nd https://github.com/reF1nd/sing-box.git sing-box
           ls -lha
           cd sing-tun
           patch -p1 < ../sing-tun.patch
@@ -41,7 +41,6 @@ jobs:
           cp tun_darwin_gvisor.go tun_openbsd_gvisor.go
           sed -i 's|DarwinEndpoint|OpenBSDEndpoint|g;s|darwin|openbsd|g' tun_openbsd_gvisor.go
           cd ../sing-box
-          git checkout reF1nd
           patch -p1 < ../sing-box.patch
           sing_tun_version=$(cat go.mod | grep github.com/sagernet/sing-tun | awk '{ print $2 }')
           echo -e "\nreplace github.com/sagernet/sing-tun ${sing_tun_version} => ../sing-tun" >> go.mod
