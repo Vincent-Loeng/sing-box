@@ -7,9 +7,9 @@
 
 # sing-box for FreeBSD/OpenBSD (with tun support)
 
-This self-use repo automatically builds the latest version of sing-box with patches
+This self-use repo automatically builds the latest version (**official and reF1nd branch**) of sing-box with patches
 
-此自用仓库自动应用补丁并构建 sing-box 最新的版本
+此自用仓库自动应用补丁并构建 sing-box 最新的版本（**原版及 reF1nd 分支**）
 
 
 ## Another tool 另一工具 [**mihomo for FreeBSD**](https://github.com/Vincent-Loeng/mihomo)
