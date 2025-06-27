@@ -56,7 +56,7 @@ jobs:
           fi
           echo "Last version: ${LAST_VERSION}, current version: ${{ env.version }}"
           if [ "${{ env.version }}" != "${LAST_VERSION}" ]; then
-            echo "${{ env.version }}" > last_version
+            echo "${{ env.version }}" > last_reF1nd_version
             echo "BUILD=true" >> $GITHUB_ENV
           else
             echo "BUILD=false" >> $GITHUB_ENV
@@ -100,12 +100,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push last_version to "hidden" branch
+      - name: Push last_reF1nd_version to "hidden" branch
         if: ${{ env.BUILD == 'true' }}
         run: |
           git config --local user.name "Vincent Loeng"
           git config --local user.email "173226116+Vincent-Loeng@users.noreply.github.com"
-          git add last_version
+          git add last_reF1nd_version
           git commit -m "Release ${{ env.RELEASE_NAME }}"
           git push
         env:
