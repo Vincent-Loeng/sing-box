@@ -7,9 +7,9 @@
 
 # sing-box for FreeBSD/OpenBSD (with tun support)
 
-This self-use repo automatically builds the latest version (**official and reF1nd branch**) of sing-box with patches
+This self-use repo automatically builds the latest version of sing-box with patches
 
-此自用仓库自动应用补丁并构建 sing-box 最新的版本（**原版及 reF1nd 分支**）
+此自用仓库自动应用补丁并构建 sing-box 最新的版本
 
 
 ## Another tool 另一工具 [**mihomo for FreeBSD**](https://github.com/Vincent-Loeng/mihomo)
@@ -29,6 +29,11 @@ This self-use repo automatically builds the latest version (**official and reF1n
 
    自 1.12.0-beta.20-vincent-auto 起，FreeBSD/OpenBSD 支持 redirect
 
+4. Subscription is supported in `reF1nd` core, please refer to [the document](https://github.com/reF1nd/sing-box/blob/reF1nd-dev/docs/configuration/provider/index.zh.md)
+
+   `reF1nd`核心支持订阅，请参考[文档](https://github.com/reF1nd/sing-box/blob/reF1nd-dev/docs/configuration/provider/index.zh.md)
+
+
 
 ## Examples 示例
 
@@ -46,15 +51,16 @@ Please refer to the given [template](template.json) (1.12)
 
 ## Notes 注意事项
 
+
 1. Please configure DNS servers manually when using automatic routing on OPNsense
 
    在 OPNsense 上使用自动路由时，请手动配置 DNS 服务器
 
-3. Please allow packets to pass when using `system` stack on pfSense/OPNsense
+2. Please allow packets to pass when using `system` stack on pfSense/OPNsense
 
    在 pfSense/OPNsense 上使用`system`栈时，请允许数据包通过
 
-4. Please add port forwarding rules when using `redirect` (higher performance)
+3. Please add port forwarding rules when using `redirect` (higher performance)
 
    使用 `redirect`（性能更好）时，请添加端口转发规则
 
