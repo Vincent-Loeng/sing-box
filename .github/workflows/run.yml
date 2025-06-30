@@ -104,6 +104,7 @@ jobs:
         run: |
           git config --local user.name "Vincent Loeng"
           git config --local user.email "173226116+Vincent-Loeng@users.noreply.github.com"
+          git pull
           git add last_version
           git commit -m "Release ${{ env.RELEASE_NAME }}"
           git push
