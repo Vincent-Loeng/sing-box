@@ -14,6 +14,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Delete old workflow runs
+        uses: Mattraks/delete-workflow-runs@main
+        with:
+          retain_days: 3
+          keep_minimum_runs: 6
+
       - name: Set variables
         run: |
           latest_version=$(curl -sSL https://api.github.com/repos/Sagernet/sing-box/releases | jq -r 'map(select(.prerelease)) | first | .tag_name' | sed 's|v||g')
@@ -110,9 +116,3 @@ jobs:
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Delete old workflow runs
-        uses: Mattraks/delete-workflow-runs@main
-        with:
-          retain_days: 3
-          keep_minimum_runs: 6
