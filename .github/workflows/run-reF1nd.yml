@@ -9,6 +9,7 @@ on:
       - hidden
     paths-ignore:
       - "**/README.md"
+      - "**/template.json"
 
 jobs:
   build:
