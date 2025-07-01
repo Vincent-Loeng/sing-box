@@ -3,6 +3,8 @@
     {
       "type": "tun",
       "tag": "tun-in",
+      // Please do not use `tun`
+      // 请不要使用 `tun`
       "interface_name": "tun0",
       "address": [
         "172.19.0.0/30",
@@ -83,14 +85,14 @@
         "ip_is_private": true,
         "outbound": "direct"
       },
+      // add proxy rules as needed
+      // 可按需添加规则
       {
         "action": "route",
         "rule_set": "openai",
         "outbound": "proxy"
       }
     ],
-    // add proxy rules as needed
-    // 可按需添加规则
     "rule_set": [
       {
         "tag": "openai",
