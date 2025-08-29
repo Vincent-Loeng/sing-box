@@ -3,6 +3,10 @@
 
 精力有限，可能不再维护，目前足以加速某些网站，比如 OpenAI
 
+**Only beta version is supported**
+
+目前，仅更新 beta 版
+
 ---
 
 # sing-box for FreeBSD/OpenBSD (with tun support)
