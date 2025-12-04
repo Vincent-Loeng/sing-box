@@ -56,14 +56,11 @@ jobs:
           git clone --depth 1 https://github.com/Sagernet/sing-box.git sing-box
           ls -lha
           cd sing-tun
+          git checkout main
           patch -p1 < ../sing-tun.patch
           cp monitor_darwin.go monitor_freebsd.go
-          cp tun_darwin_gvisor.go tun_freebsd_gvisor.go
-          sed -i 's|DarwinEndpoint|FreeBSDEndpoint|g;s|darwin|freebsd|g' tun_freebsd_gvisor.go
-          cp monitor_darwin.go monitor_openbsd.go
-          cp tun_darwin_gvisor.go tun_openbsd_gvisor.go
-          sed -i 's|DarwinEndpoint|OpenBSDEndpoint|g;s|darwin|openbsd|g' tun_openbsd_gvisor.go
           cd ../sing-box
+          git checkout main
           patch -p1 < ../sing-box.patch
           sing_tun_version=$(cat go.mod | grep github.com/sagernet/sing-tun | awk '{ print $2 }')
           echo -e "\nreplace github.com/sagernet/sing-tun ${sing_tun_version} => ../sing-tun" >> go.mod
