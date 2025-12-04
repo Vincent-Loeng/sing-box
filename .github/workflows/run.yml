@@ -52,8 +52,8 @@ jobs:
       - name: Apply patches
         #if: ${{ env.BUILD == 'true' }}
         run: |
-          git clone --depth 1 https://github.com/Sagernet/sing-tun.git sing-tun
-          git clone --depth 1 https://github.com/Sagernet/sing-box.git sing-box
+          git clone https://github.com/Sagernet/sing-tun.git sing-tun
+          git clone https://github.com/Sagernet/sing-box.git sing-box
           ls -lha
           cd sing-tun
           git checkout main
