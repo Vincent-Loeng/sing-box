@@ -1,1373 +1,504 @@
-diff --git a/.github/workflows/test.yml b/.github/workflows/test.yml
-index 3afe968..789f448 100644
---- a/.github/workflows/test.yml
-+++ b/.github/workflows/test.yml
-@@ -109,4 +109,21 @@ jobs:
-         continue-on-error: true
-       - name: Build
-         run: |
--          make test
-\ No newline at end of file
-+          make test
-+  build_freebsd:
-+    name: FreeBSD
-+    runs-on: ubuntu-latest
-+    steps:
-+      - name: Checkout
-+        uses: actions/checkout@v4
-+        with:
-+          fetch-depth: 0
-+      - name: Setup Go and Build
-+        uses: vmactions/freebsd-vm@v1
-+        with:
-+          usesh: true
-+          sync: sshfs
-+          prepare: |
-+            pkg install -y go
-+          run: |
-+            make test
-diff --git a/Makefile b/Makefile
-index f7a8532..c19acad 100644
---- a/Makefile
-+++ b/Makefile
-@@ -7,6 +7,7 @@ build:
- 	GOOS=linux GOARCH=arm go build -v -tags with_gvisor .
- 	GOOS=android GOARCH=arm64 go build -v -tags with_gvisor .
- 	GOOS=windows GOARCH=amd64 go build -v -tags with_gvisor .
-+	GOOS=freebsd GOARCH=amd64 go build -v -tags with_gvisor .
- 
- fmt:
- 	@gofumpt -l -w .
-diff --git a/monitor_other.go b/monitor_other.go
-index c6b447c..398b31c 100644
---- a/monitor_other.go
-+++ b/monitor_other.go
+diff --git a/common/process/searcher_freebsd.go b/common/process/searcher_freebsd.go
+new file mode 100644
+index 00000000..4051c98c
+--- /dev/null
++++ b/common/process/searcher_freebsd.go
+@@ -0,0 +1,251 @@
++package process
++
++import (
++	"context"
++	"encoding/binary"
++	"fmt"
++	"net/netip"
++	"strconv"
++	"strings"
++	"sync"
++	"syscall"
++	"unsafe"
++
++	E "github.com/sagernet/sing/common/exceptions"
++)
++
++var _ Searcher = (*freebsdSearcher)(nil)
++
++type freebsdSearcher struct{}
++
++func NewSearcher(_ Config) (Searcher, error) {
++	return &freebsdSearcher{}, nil
++}
++
++func (d *freebsdSearcher) FindProcessInfo(ctx context.Context, network string, source netip.AddrPort, destination netip.AddrPort) (*Info, error) {
++	processName, err := findProcessName(network, source.Addr(), int(source.Port()))
++	if err != nil {
++		return nil, err
++	}
++	return &Info{ProcessPath: processName, UserId: -1}, nil
++}
++
++// store process name for when dealing with multiple PROCESS-NAME rules
++var (
++	defaultSearcher *searcher
++	once            sync.Once
++)
++
++func findProcessName(network string, ip netip.Addr, srcPort int) (string, error) {
++	once.Do(func() {
++		if err := initSearcher(); err != nil {
++			return
++		}
++	})
++
++	if defaultSearcher == nil {
++		return "", E.New("not support on this platform")
++	}
++
++	var spath string
++	isTCP := network == "tcp"
++	switch network {
++	case "tcp":
++		spath = "net.inet.tcp.pcblist"
++	case "udp":
++		spath = "net.inet.udp.pcblist"
++	default:
++		return "", E.New("invalid network")
++	}
++
++	value, err := syscall.Sysctl(spath)
++	if err != nil {
++		return "", err
++	}
++
++	buf := []byte(value)
++	pid, err := defaultSearcher.Search(buf, ip, uint16(srcPort), isTCP)
++	if err != nil {
++		return "", err
++	}
++
++	pp, err := getExecPathFromPID(pid)
++	return pp, err
++}
++
++func getExecPathFromPID(pid uint32) (string, error) {
++	buf := make([]byte, 2048)
++	size := uint64(len(buf))
++	// CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, pid
++	mib := [4]uint32{1, 14, 12, pid}
++
++	_, _, errno := syscall.Syscall6(
++		syscall.SYS___SYSCTL,
++		uintptr(unsafe.Pointer(&mib[0])),
++		uintptr(len(mib)),
++		uintptr(unsafe.Pointer(&buf[0])),
++		uintptr(unsafe.Pointer(&size)),
++		0,
++		0)
++	if errno != 0 || size == 0 {
++		return "", errno
++	}
++
++	return string(buf[:size-1]), nil
++}
++
++func readNativeUint32(b []byte) uint32 {
++	return *(*uint32)(unsafe.Pointer(&b[0]))
++}
++
++type searcher struct {
++	// sizeof(struct xinpgen)
++	headSize int
++	// sizeof(struct xtcpcb)
++	tcpItemSize int
++	// sizeof(struct xinpcb)
++	udpItemSize  int
++	udpInpOffset int
++	port         int
++	ip           int
++	vflag        int
++	socket       int
++
++	// sizeof(struct xfile)
++	fileItemSize int
++	data         int
++	pid          int
++}
++
++func (s *searcher) Search(buf []byte, ip netip.Addr, port uint16, isTCP bool) (uint32, error) {
++	var itemSize int
++	var inpOffset int
++
++	if isTCP {
++		// struct xtcpcb
++		itemSize = s.tcpItemSize
++		inpOffset = 8
++	} else {
++		// struct xinpcb
++		itemSize = s.udpItemSize
++		inpOffset = s.udpInpOffset
++	}
++
++	isIPv4 := ip.Is4()
++	// skip the first xinpgen block
++	for i := s.headSize; i+itemSize <= len(buf); i += itemSize {
++		inp := i + inpOffset
++
++		srcPort := binary.BigEndian.Uint16(buf[inp+s.port : inp+s.port+2])
++
++		if port != srcPort {
++			continue
++		}
++
++		// xinpcb.inp_vflag
++		flag := buf[inp+s.vflag]
++
++		var srcIP netip.Addr
++		switch {
++		case flag&0x1 > 0 && isIPv4:
++			// ipv4
++			srcIP, _ = netip.AddrFromSlice(buf[inp+s.ip : inp+s.ip+4])
++		case flag&0x2 > 0 && !isIPv4:
++			// ipv6
++			srcIP, _ = netip.AddrFromSlice(buf[inp+s.ip-12 : inp+s.ip+4])
++		default:
++			continue
++		}
++		srcIP = srcIP.Unmap()
++
++		if ip != srcIP {
++			continue
++		}
++
++		// xsocket.xso_so, interpreted as big endian anyway since it's only used for comparison
++		socket := binary.BigEndian.Uint64(buf[inp+s.socket : inp+s.socket+8])
++		return s.searchSocketPid(socket)
++	}
++	return 0, ErrNotFound
++}
++
++func (s *searcher) searchSocketPid(socket uint64) (uint32, error) {
++	value, err := syscall.Sysctl("kern.file")
++	if err != nil {
++		return 0, err
++	}
++
++	buf := []byte(value)
++
++	// struct xfile
++	itemSize := s.fileItemSize
++	for i := 0; i+itemSize <= len(buf); i += itemSize {
++		// xfile.xf_data
++		data := binary.BigEndian.Uint64(buf[i+s.data : i+s.data+8])
++		if data == socket {
++			// xfile.xf_pid
++			pid := readNativeUint32(buf[i+s.pid : i+s.pid+4])
++			return pid, nil
++		}
++	}
++	return 0, ErrNotFound
++}
++
++func newSearcher(major int, machine string) *searcher {
++	var s *searcher
++	switch major {
++	case 12:
++		fallthrough
++	case 13:
++		fallthrough
++	case 14:
++		fallthrough
++	case 15:
++		var vflag int
++		if machine == "i386" {
++			vflag = 388
++		} else if machine == "amd64" || machine == "arm64" {
++			vflag = 392
++		} else {
++			return nil
++		}
++		s = &searcher{
++			headSize:     64,
++			tcpItemSize:  744,
++			udpItemSize:  400,
++			port:         254,
++			ip:           284,
++			vflag:        vflag,
++			socket:       16,
++			fileItemSize: 128,
++			data:         56,
++			pid:          8,
++		}
++	}
++	return s
++}
++
++func initSearcher() error {
++	osRelease, err := syscall.Sysctl("kern.osrelease")
++	if err != nil {
++		return err
++	}
++	machine, err := syscall.Sysctl("hw.machine")
++	if err != nil {
++		return err
++	}
++
++	dot := strings.Index(osRelease, ".")
++	if dot != -1 {
++		osRelease = osRelease[:dot]
++	}
++	major, err := strconv.Atoi(osRelease)
++	if err != nil {
++		return err
++	}
++	defaultSearcher = newSearcher(major, machine)
++	if defaultSearcher == nil {
++		return fmt.Errorf("unsupported freebsd version %d (%s)", major, machine)
++	}
++	return nil
++}
+diff --git a/common/process/searcher_stub.go b/common/process/searcher_stub.go
+index 4665d91f..1464efb1 100644
+--- a/common/process/searcher_stub.go
++++ b/common/process/searcher_stub.go
 @@ -1,4 +1,4 @@
--//go:build !(linux || windows || darwin)
-+//go:build !(linux || windows || darwin || freebsd || openbsd)
+-//go:build !linux && !windows && !darwin
++//go:build !linux && !windows && !darwin && !freebsd
  
- package tun
+ package process
  
-diff --git a/monitor_shared.go b/monitor_shared.go
-index 12e3e21..152ddc1 100644
---- a/monitor_shared.go
-+++ b/monitor_shared.go
+diff --git a/common/redir/redir_freebsd.go b/common/redir/redir_freebsd.go
+new file mode 100644
+index 00000000..daa30d74
+--- /dev/null
++++ b/common/redir/redir_freebsd.go
+@@ -0,0 +1,95 @@
++package redir
++
++import (
++	"encoding/binary"
++	"errors"
++	"net"
++	"net/netip"
++	"os"
++	"syscall"
++	"unsafe"
++
++	M "github.com/sagernet/sing/common/metadata"
++)
++
++const (
++	PF_IN       = 0x1
++	PF_OUT      = 0x2
++	DIOCNATLOOK = 0xc04c4417
++)
++
++func Ntohs(i uint16) uint16 {
++	return binary.BigEndian.Uint16((*(*[2]byte)(unsafe.Pointer(&i)))[:])
++}
++
++func Htons(i uint16) uint16 {
++	b := make([]byte, 2)
++	binary.BigEndian.PutUint16(b, i)
++	return *(*uint16)(unsafe.Pointer(&b[0]))
++}
++
++func GetOriginalDestination(conn net.Conn) (destination netip.AddrPort, err error) {
++	_, err = os.Stat("/dev/pf")
++	if errors.Is(err, os.ErrNotExist) {
++		// ipfw
++		la := conn.LocalAddr().(*net.TCPAddr)
++		var ip net.IP
++		if la.IP.To4() != nil {
++			ip = make(net.IP, net.IPv4len)
++			copy(ip, la.IP[net.IPv6len-net.IPv4len:])
++		} else {
++			ip = make(net.IP, net.IPv6len)
++			copy(ip, la.IP[:])
++		}
++		destination = netip.AddrPortFrom(M.AddrFromIP(ip), uint16(la.Port))
++		return destination, nil
++	}
++
++	// pf
++	fd, err := syscall.Open("/dev/pf", 0, syscall.O_RDWR)
++	if err != nil {
++		return netip.AddrPort{}, err
++	}
++	defer syscall.Close(fd)
++	nl := struct {
++		saddr, daddr, rsaddr, rdaddr [16]byte
++		sport, dport, rsport, rdport [2]byte
++		af, proto, direction         uint8
++	}{
++		af:        syscall.AF_INET,
++		proto:     syscall.IPPROTO_TCP,
++		direction: PF_OUT,
++	}
++	la := conn.LocalAddr().(*net.TCPAddr)
++	ra := conn.RemoteAddr().(*net.TCPAddr)
++	raIP, laIP := ra.IP, la.IP
++	raPort, laPort := ra.Port, la.Port
++	switch {
++	case raIP.To4() != nil:
++		copy(nl.saddr[:net.IPv4len], raIP.To4())
++		copy(nl.daddr[:net.IPv4len], laIP.To4())
++		nl.af = syscall.AF_INET
++	default:
++		copy(nl.saddr[:], raIP.To16())
++		copy(nl.daddr[:], laIP.To16())
++		nl.af = syscall.AF_INET6
++	}
++	binary.BigEndian.PutUint16(nl.sport[:], uint16(raPort))
++	binary.BigEndian.PutUint16(nl.dport[:], uint16(laPort))
++	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), DIOCNATLOOK, uintptr(unsafe.Pointer(&nl))); errno != 0 {
++		return netip.AddrPort{}, errno
++	}
++
++	var ip net.IP
++	switch nl.af {
++	case syscall.AF_INET:
++		ip = make(net.IP, net.IPv4len)
++		copy(ip, nl.rdaddr[:net.IPv4len])
++	case syscall.AF_INET6:
++		ip = make(net.IP, net.IPv6len)
++		copy(ip, nl.rdaddr[:])
++	}
++	port := binary.BigEndian.Uint16(nl.rdport[:])
++	destination = netip.AddrPortFrom(M.AddrFromIP(ip), port)
++	return
++}
+diff --git a/common/redir/redir_openbsd.go b/common/redir/redir_openbsd.go
+new file mode 100644
+index 00000000..fbad2284
+--- /dev/null
++++ b/common/redir/redir_openbsd.go
+@@ -0,0 +1,66 @@
++package redir
++
++import (
++	"encoding/binary"
++	"net"
++	"net/netip"
++	"syscall"
++	"unsafe"
++
++	M "github.com/sagernet/sing/common/metadata"
++)
++
++const (
++	PF_IN       = 0x1
++	PF_OUT      = 0x2
++	DIOCNATLOOK = 0xc0504417
++)
++
++func GetOriginalDestination(conn net.Conn) (destination netip.AddrPort, err error) {
++	fd, err := syscall.Open("/dev/pf", 0, syscall.O_RDWR)
++	if err != nil {
++		return netip.AddrPort{}, err
++	}
++	defer syscall.Close(fd)
++	nl := struct {
++		saddr, daddr, rsaddr, rdaddr                    [16]byte
++		rdomain, rrdomain, sport, dport, rsport, rdport [2]byte
++		af, proto, direction                            uint8
++	}{
++		af:        syscall.AF_INET,
++		proto:     syscall.IPPROTO_TCP,
++		direction: PF_OUT,
++	}
++	la := conn.LocalAddr().(*net.TCPAddr)
++	ra := conn.RemoteAddr().(*net.TCPAddr)
++	raIP, laIP := ra.IP, la.IP
++	raPort, laPort := ra.Port, la.Port
++	switch {
++	case raIP.To4() != nil:
++		copy(nl.saddr[:net.IPv4len], raIP.To4())
++		copy(nl.daddr[:net.IPv4len], laIP.To4())
++		nl.af = syscall.AF_INET
++	default:
++		copy(nl.saddr[:], raIP.To16())
++		copy(nl.daddr[:], laIP.To16())
++		nl.af = syscall.AF_INET6
++	}
++	binary.BigEndian.PutUint16(nl.sport[:], uint16(raPort))
++	binary.BigEndian.PutUint16(nl.dport[:], uint16(laPort))
++	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), DIOCNATLOOK, uintptr(unsafe.Pointer(&nl))); errno != 0 {
++		return netip.AddrPort{}, errno
++	}
++
++	var ip net.IP
++	switch nl.af {
++	case syscall.AF_INET:
++		ip = make(net.IP, net.IPv4len)
++		copy(ip, nl.rdaddr[:net.IPv4len])
++	case syscall.AF_INET6:
++		ip = make(net.IP, net.IPv6len)
++		copy(ip, nl.rdaddr[:])
++	}
++	port := binary.BigEndian.Uint16(nl.rdport[:])
++	destination = netip.AddrPortFrom(M.AddrFromIP(ip), port)
++	return
++}
+diff --git a/common/redir/redir_other.go b/common/redir/redir_other.go
+index 3d60afeb..3ee166dd 100644
+--- a/common/redir/redir_other.go
++++ b/common/redir/redir_other.go
 @@ -1,4 +1,4 @@
--//go:build linux || windows || darwin
-+//go:build linux || windows || darwin || freebsd || openbsd
+-//go:build !linux && !darwin
++//go:build !linux && !darwin && !freebsd && !openbsd
  
- package tun
+ package redir
  
-diff --git a/tun.go b/tun.go
-index 882adc5..b3bb6c0 100644
---- a/tun.go
-+++ b/tun.go
-@@ -48,6 +48,7 @@ type LinuxTUN interface {
- const (
- 	DefaultIPRoute2TableIndex = 2022
- 	DefaultIPRoute2RuleIndex  = 9000
-+	DefaultFIBIndex           = 2022
+diff --git a/go.mod b/go.mod
+index bb72af34..a0ae23b7 100644
+--- a/go.mod
++++ b/go.mod
+@@ -133,3 +133,5 @@ require (
+ 	gopkg.in/yaml.v3 v3.0.1 // indirect
+ 	lukechampine.com/blake3 v1.3.0 // indirect
  )
- 
- type Options struct {
-@@ -63,6 +64,7 @@ type Options struct {
- 	DNSServers               []netip.Addr
- 	IPRoute2TableIndex       int
- 	IPRoute2RuleIndex        int
-+	FIBIndex                 int
- 	AutoRedirectMarkMode     bool
- 	AutoRedirectInputMark    uint32
- 	AutoRedirectOutputMark   uint32
-@@ -104,6 +106,10 @@ func (o *Options) Inet4GatewayAddr() netip.Addr {
- 				return o.Inet4Address[0].Addr().Next()
- 			}
- 		case "darwin":
-+			fallthrough
-+		case "freebsd":
-+			fallthrough
-+		case "openbsd":
- 			return o.Inet4Address[0].Addr()
- 		default:
- 			if !o.InterfaceScope {
-@@ -130,6 +136,10 @@ func (o *Options) Inet6GatewayAddr() netip.Addr {
- 				return o.Inet6Address[0].Addr().Next()
- 			}
- 		case "darwin":
-+			fallthrough
-+		case "freebsd":
-+			fallthrough
-+		case "openbsd":
- 			return o.Inet6Address[0].Addr()
- 		default:
- 			if !o.InterfaceScope {
-diff --git a/tun_freebsd.go b/tun_freebsd.go
-new file mode 100644
-index 0000000..37b8092
---- /dev/null
-+++ b/tun_freebsd.go
-@@ -0,0 +1,719 @@
-+/* SPDX-License-Identifier: MIT
-+ *
-+ * Copyright (C) 2017-2023 WireGuard LLC. All Rights Reserved.
-+ */
-+// The code about tun configuration was obtained partially from wireguard-go.
 +
-+package tun
-+
-+import (
-+	"errors"
-+	"fmt"
-+	"net"
-+	"net/netip"
-+	"os"
-+	"os/exec"
-+	"strings"
-+	"syscall"
-+	"unsafe"
-+
-+	"github.com/sagernet/sing-tun/internal/gtcpip/header"
-+	"github.com/sagernet/sing/common"
-+	"github.com/sagernet/sing/common/buf"
-+	"github.com/sagernet/sing/common/bufio"
-+	E "github.com/sagernet/sing/common/exceptions"
-+	N "github.com/sagernet/sing/common/network"
-+
-+	"golang.org/x/net/route"
-+	"golang.org/x/sys/unix"
-+)
-+
-+const PacketOffset = 4
-+
-+type NativeTun struct {
-+	tunFile      *os.File
-+	tunResolv    string
-+	tunWriter    N.VectorisedWriter
-+	options      Options
-+	inet4Address [4]byte
-+	inet6Address [16]byte
-+	routeSet     bool
-+}
-+
-+func (t *NativeTun) Name() (string, error) {
-+	return getTunName(t.tunFile)
-+}
-+
-+func New(options Options) (Tun, error) {
-+	var nativeTun *NativeTun
-+	var tunFd int
-+	if options.FileDescriptor == 0 {
-+		if len(options.Name) > unix.IFNAMSIZ-1 {
-+			return nil, E.New("interface name too long: ", options.Name)
-+		}
-+
-+		// Weird error happens when using pf
-+		if options.Name == "tun" {
-+			return nil, E.New("bad tun name: ", options.Name)
-+		}
-+
-+		tunFile, err := os.OpenFile("/dev/tun", unix.O_RDWR|unix.O_CLOEXEC, 0)
-+		if err != nil {
-+			return nil, err
-+		}
-+
-+		assignedName, err := getTunName(tunFile)
-+		if err != nil {
-+			return nil, E.Errors(err, tunFile.Close(), destoryTun("tun"))
-+		}
-+
-+		err = E.Errors(
-+			setIfHeadMode(tunFile), setIfMode(tunFile),
-+			setND6(assignedName), setPID(tunFile),
-+			setMTU(assignedName, int32(options.MTU)),
-+			setTunName(options.Name, assignedName),
-+		)
-+		if err != nil {
-+			return nil, E.Errors(err, tunFile.Close(), destoryTun(assignedName))
-+		}
-+
-+		err = E.Errors(
-+			setGateway(tunFile, options),
-+			setTunAddress(options.Name, options),
-+		)
-+		if err != nil {
-+			return nil, E.Errors(err, tunFile.Close(), destoryTun(options.Name))
-+		}
-+
-+		var resolvString string = ""
-+		if options.AutoRoute {
-+			resolvString, err = setDNSServers(options)
-+			if err != nil {
-+				return nil, E.Errors(err, tunFile.Close(), destoryTun(options.Name))
-+			}
-+		}
-+
-+		nativeTun = &NativeTun{
-+			tunFile:   tunFile,
-+			options:   options,
-+			tunResolv: resolvString,
-+		}
-+	} else {
-+		tunFd = options.FileDescriptor
-+		nativeTun = &NativeTun{
-+			tunFile: os.NewFile(uintptr(tunFd), "utun"),
-+			options: options,
-+		}
-+	}
-+
-+	if len(options.Inet4Address) > 0 {
-+		nativeTun.inet4Address = options.Inet4Address[0].Addr().As4()
-+	}
-+	if len(options.Inet6Address) > 0 {
-+		nativeTun.inet6Address = options.Inet6Address[0].Addr().As16()
-+	}
-+	var ok bool
-+	nativeTun.tunWriter, ok = bufio.CreateVectorisedWriter(nativeTun.tunFile)
-+	if !ok {
-+		panic("create vectorised writer")
-+	}
-+	return nativeTun, nil
-+}
-+
-+func (t *NativeTun) Start() error {
-+	t.options.InterfaceMonitor.RegisterMyInterface(t.options.Name)
-+	return t.setRoutes()
-+}
-+
-+func (t *NativeTun) Close() error {
-+	if t.options.AutoRoute {
-+		return E.Errors(
-+			restoreDNSServers(t.tunResolv), t.unsetRoutes(),
-+			t.tunFile.Close(), destoryTun(t.options.Name),
-+		)
-+	}
-+	return E.Errors(t.unsetRoutes(), t.tunFile.Close(), destoryTun(t.options.Name))
-+}
-+
-+func (t *NativeTun) Read(p []byte) (n int, err error) {
-+	return t.tunFile.Read(p)
-+}
-+
-+func (t *NativeTun) Write(p []byte) (n int, err error) {
-+	//To prevent "address family not supported by protocol family"
-+	switch uint(p[3]) {
-+	case unix.AF_INET:
-+		copy(p[:4], packetHeader4[:])
-+	case unix.AF_INET6:
-+		copy(p[:4], packetHeader6[:])
-+	}
-+	return t.tunFile.Write(p)
-+}
-+
-+var (
-+	packetHeader4 = [4]byte{0x00, 0x00, 0x00, unix.AF_INET}
-+	packetHeader6 = [4]byte{0x00, 0x00, 0x00, unix.AF_INET6}
-+)
-+
-+func (t *NativeTun) WriteVectorised(buffers []*buf.Buffer) error {
-+	var packetHeader []byte
-+	switch header.IPVersion(buffers[0].Bytes()) {
-+	case header.IPv4Version:
-+		packetHeader = packetHeader4[:]
-+	case header.IPv6Version:
-+		packetHeader = packetHeader6[:]
-+	}
-+	return t.tunWriter.WriteVectorised(append([]*buf.Buffer{buf.As(packetHeader)}, buffers...))
-+}
-+
-+const (
-+	TUNSIFHEAD             = 0x80047460
-+	TUNSIFMODE             = 0x8004745e
-+	TUNGIFNAME             = 0x4020745d
-+	TUNSIFPID              = 0x2000745f
-+	SIOCGIFINFO_IN6        = 0xc048696c
-+	SIOCSIFINFO_IN6        = 0xc048696d
-+	ND6_IFF_AUTO_LINKLOCAL = 0x20
-+	ND6_IFF_NO_DAD         = 0x100
-+	SIOCAIFADDR_IN6        = 2166384923 //(0x80000000) | ((288 & 0x1fff) << 16) | uint32(byte('i'))<<8 | 27
-+	IN6_IFF_NODAD          = 0x0020
-+	ND6_INFINITE_LIFETIME  = 0xFFFFFFFF
-+)
-+
-+type Ifreq struct {
-+	Name [unix.IFNAMSIZ]byte
-+	Data uintptr
-+}
-+
-+type IfreqMTU struct {
-+	Name [unix.IFNAMSIZ]byte
-+	MTU  int32
-+}
-+
-+type ND6Req struct {
-+	Name          [unix.IFNAMSIZ]byte
-+	Linkmtu       uint32
-+	Maxmtu        uint32
-+	Basereachable uint32
-+	Reachable     uint32
-+	Retrans       uint32
-+	Flags         uint32
-+	Recalctm      int
-+	Chlim         uint8
-+	Initialized   uint8
-+	Randomseed0   [8]byte
-+	Randomseed1   [8]byte
-+	Randomid      [8]byte
-+}
-+
-+type ifAliasReq struct {
-+	Name    [unix.IFNAMSIZ]byte
-+	Addr    unix.RawSockaddrInet4
-+	Dstaddr unix.RawSockaddrInet4
-+	Mask    unix.RawSockaddrInet4
-+	Vhid    uint32
-+}
-+
-+type ifAliasReq6 struct {
-+	Name     [16]byte
-+	Addr     unix.RawSockaddrInet6
-+	Dstaddr  unix.RawSockaddrInet6
-+	Mask     unix.RawSockaddrInet6
-+	Flags    uint32
-+	Lifetime addrLifetime6
-+	Vhid     uint32
-+}
-+
-+type addrLifetime6 struct {
-+	Expire    float64
-+	Preferred float64
-+	Vltime    uint32
-+	Pltime    uint32
-+}
-+
-+func getTunName(tunFile *os.File) (string, error) {
-+	var errno syscall.Errno
-+	var ifr Ifreq
-+	err := useFd(tunFile, func(fd uintptr) {
-+		_, _, errno = unix.Syscall(
-+			syscall.SYS_IOCTL,
-+			uintptr(fd),
-+			uintptr(TUNGIFNAME),
-+			uintptr(unsafe.Pointer(&ifr)),
-+		)
-+	})
-+	if errno != 0 {
-+		return "", os.NewSyscallError("TUNGIFNAME", err)
-+	}
-+	if err != nil {
-+		return "", err
-+	}
-+	return unix.ByteSliceToString(ifr.Name[:]), nil
-+}
-+
-+func destoryTun(name string) error {
-+	err := useSocket(unix.AF_INET, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0, func(socketFd int) error {
-+		var ifr Ifreq
-+		copy(ifr.Name[:], name)
-+		_, _, errno := unix.Syscall(
-+			syscall.SYS_IOCTL,
-+			uintptr(socketFd),
-+			uintptr(unix.SIOCIFDESTROY),
-+			uintptr(unsafe.Pointer(&ifr)),
-+		)
-+		if errno != 0 {
-+			return E.New(errno.Error())
-+		}
-+		return nil
-+	})
-+	if err != nil {
-+		return os.NewSyscallError("SIOCIFDESTROY", err)
-+	}
-+	return nil
-+}
-+
-+func setFIB(tunFile *os.File, fib int) error {
-+	var errno syscall.Errno
-+	err := useFd(tunFile, func(fd uintptr) {
-+		_, _, errno = unix.Syscall(
-+			syscall.SYS_SETFIB,
-+			uintptr(fib),
-+			uintptr(0),
-+			uintptr(0),
-+		)
-+	})
-+	if errno != 0 {
-+		return os.NewSyscallError("SYS_SETFIB", errno)
-+	}
-+	return err
-+}
-+
-+func setGateway(tunFile *os.File, options Options) error {
-+	if !options.AutoRoute {
-+		return nil
-+	}
-+	add_addr, err := unix.SysctlUint32("net.add_addr_allfibs")
-+	if err != nil {
-+		return err
-+	}
-+	if add_addr == 0 {
-+		err = runCommand("sysctl net.add_addr_allfibs=1")
-+		if err != nil {
-+			return err
-+		}
-+	}
-+	fibs, err := unix.SysctlUint32("net.fibs")
-+	if err != nil {
-+		return err
-+	}
-+	var fibSize int = options.FIBIndex + 1
-+	if fibs < uint32(fibSize) {
-+		err = runCommand(fmt.Sprintf("sysctl net.fibs=%d\n", fibSize))
-+		if err != nil {
-+			return err
-+		}
-+	}
-+
-+	var defaultGateway4 string = ""
-+	var defaultGateway6 string = ""
-+	ribMessage, err := route.FetchRIB(unix.AF_UNSPEC, route.RIBTypeRoute, 0)
-+	if err != nil {
-+		return err
-+	}
-+	routeMessages, err := route.ParseRIB(route.RIBTypeRoute, ribMessage)
-+	if err != nil {
-+		return err
-+	}
-+	for _, rawRouteMessage := range routeMessages {
-+		routeMessage := rawRouteMessage.(*route.RouteMessage)
-+		if len(routeMessage.Addrs) <= unix.RTAX_NETMASK {
-+			continue
-+		}
-+		gateway4, isIPv4Gateway := routeMessage.Addrs[unix.RTAX_GATEWAY].(*route.Inet4Addr)
-+		if !isIPv4Gateway {
-+			continue
-+		}
-+		netmask4, isIPv4Mask := routeMessage.Addrs[unix.RTAX_NETMASK].(*route.Inet4Addr)
-+		if !isIPv4Mask {
-+			continue
-+		}
-+		ones, _ := net.IPMask(netmask4.IP[:]).Size()
-+		if ones != 0 {
-+			continue
-+		}
-+		defaultGateway4 = netip.AddrFrom4(gateway4.IP).String()
-+	}
-+	for _, rawRouteMessage := range routeMessages {
-+		routeMessage := rawRouteMessage.(*route.RouteMessage)
-+		if len(routeMessage.Addrs) <= unix.RTAX_NETMASK {
-+			continue
-+		}
-+		gateway6, isIPv6Gateway := routeMessage.Addrs[unix.RTAX_GATEWAY].(*route.Inet6Addr)
-+		if !isIPv6Gateway {
-+			continue
-+		}
-+		netmask6, isIPv6Mask := routeMessage.Addrs[unix.RTAX_NETMASK].(*route.Inet6Addr)
-+		if !isIPv6Mask {
-+			continue
-+		}
-+		ones, _ := net.IPMask(netmask6.IP[:]).Size()
-+		if ones != 0 {
-+			continue
-+		}
-+		defaultGateway6 = netip.AddrFrom16(gateway6.IP).String()
-+	}
-+
-+	err = setFIB(tunFile, fibSize-1)
-+	if err != nil {
-+		return err
-+	}
-+	runCommand(fmt.Sprintf("setfib %d route delete default", fibSize-1))
-+	runCommand(fmt.Sprintf("setfib %d route delete -inet6 default", fibSize-1))
-+
-+	ribMessage, err = route.FetchRIB(unix.AF_UNSPEC, route.RIBTypeRoute, 0)
-+	if err != nil {
-+		return err
-+	}
-+	routeMessages, err = route.ParseRIB(route.RIBTypeRoute, ribMessage)
-+	if err != nil {
-+		return err
-+	}
-+	if len(routeMessages) == 0 {
-+		return E.New("empty fib, please change the `fib_index`")
-+	}
-+	if defaultGateway4 != "" {
-+		err = runCommand(fmt.Sprintf("setfib %d route add default %s", fibSize-1, defaultGateway4))
-+		if err != nil {
-+			return err
-+		}
-+	}
-+	if defaultGateway6 != "" {
-+		interfaceName := options.InterfaceMonitor.DefaultInterface().Name
-+		err = runCommand(fmt.Sprintf(
-+			"setfib %d route add -inet6 default %s%%%s",
-+			fibSize-1, defaultGateway6, interfaceName,
-+		))
-+		if err != nil {
-+			return err
-+		}
-+	}
-+
-+	return nil
-+}
-+
-+func setIfHeadMode(tunFile *os.File) error {
-+	var errno syscall.Errno
-+	ifheadmode := 1
-+	err := useFd(tunFile, func(fd uintptr) {
-+		_, _, errno = unix.Syscall(
-+			syscall.SYS_IOCTL,
-+			uintptr(fd),
-+			uintptr(TUNSIFHEAD),
-+			uintptr(unsafe.Pointer(&ifheadmode)),
-+		)
-+	})
-+	if errno != 0 {
-+		return os.NewSyscallError("TUNSIFHEAD", errno)
-+	}
-+	return err
-+}
-+
-+func setIfMode(tunFile *os.File) error {
-+	var errno syscall.Errno
-+	ifflags := syscall.IFF_BROADCAST | syscall.IFF_MULTICAST
-+	err := useFd(tunFile, func(fd uintptr) {
-+		_, _, errno = unix.Syscall(
-+			syscall.SYS_IOCTL,
-+			uintptr(fd),
-+			uintptr(TUNSIFMODE),
-+			uintptr(unsafe.Pointer(&ifflags)),
-+		)
-+	})
-+	if errno != 0 {
-+		return os.NewSyscallError("TUNSIFMODE", errno)
-+	}
-+	return err
-+}
-+
-+func setND6(name string) error {
-+	var nd6req ND6Req
-+	copy(nd6req.Name[:], name)
-+	err := useSocket(unix.AF_INET6, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0, func(socketFd int) error {
-+		_, _, errno := unix.Syscall(
-+			syscall.SYS_IOCTL,
-+			uintptr(socketFd),
-+			uintptr(SIOCGIFINFO_IN6),
-+			uintptr(unsafe.Pointer(&nd6req)),
-+		)
-+		if errno != 0 {
-+			return E.New(errno.Error())
-+		}
-+		return nil
-+	})
-+	if err != nil {
-+		return os.NewSyscallError("SIOCGIFINFO_IN6", err)
-+	}
-+	nd6req.Flags = nd6req.Flags &^ ND6_IFF_AUTO_LINKLOCAL
-+	nd6req.Flags = nd6req.Flags | ND6_IFF_NO_DAD
-+	err = useSocket(unix.AF_INET6, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0, func(socketFd int) error {
-+		_, _, errno := unix.Syscall(
-+			syscall.SYS_IOCTL,
-+			uintptr(socketFd),
-+			uintptr(SIOCSIFINFO_IN6),
-+			uintptr(unsafe.Pointer(&nd6req)),
-+		)
-+		if errno != 0 {
-+			return E.New(errno.Error())
-+		}
-+		return nil
-+	})
-+	if err != nil {
-+		return os.NewSyscallError("SIOCSIFINFO_IN6", err)
-+	}
-+	return nil
-+}
-+
-+func setPID(tunFile *os.File) error {
-+	var errno syscall.Errno
-+	err := useFd(tunFile, func(fd uintptr) {
-+		_, _, errno = unix.Syscall(
-+			syscall.SYS_IOCTL,
-+			uintptr(fd),
-+			uintptr(TUNSIFPID),
-+			uintptr(0),
-+		)
-+	})
-+	if errno != 0 {
-+		return os.NewSyscallError("TUNSIFPID", err)
-+	}
-+	return err
-+}
-+
-+func setMTU(name string, MTU int32) error {
-+	var ifrMTU IfreqMTU
-+	copy(ifrMTU.Name[:], []byte(name))
-+	ifrMTU.MTU = MTU
-+	err := useSocket(unix.AF_INET, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0, func(socketFd int) error {
-+		_, _, errno := unix.Syscall(
-+			syscall.SYS_IOCTL,
-+			uintptr(socketFd),
-+			uintptr(unix.SIOCSIFMTU),
-+			uintptr(unsafe.Pointer(&ifrMTU)),
-+		)
-+		if errno != 0 {
-+			return E.New(errno.Error())
-+		}
-+		return nil
-+	})
-+	if err != nil {
-+		return os.NewSyscallError("SIOCSIFMTU", err)
-+	}
-+	return nil
-+}
-+
-+func setTunName(name string, assignedName string) error {
-+	err := useSocket(unix.AF_INET, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0, func(socketFd int) error {
-+		var newName [unix.IFNAMSIZ]byte
-+		copy(newName[:], name)
-+		var ifr Ifreq
-+		copy(ifr.Name[:], assignedName)
-+		ifr.Data = uintptr(unsafe.Pointer(&newName[0]))
-+		_, _, errno := unix.Syscall(
-+			syscall.SYS_IOCTL,
-+			uintptr(socketFd),
-+			uintptr(unix.SIOCSIFNAME),
-+			uintptr(unsafe.Pointer(&ifr)),
-+		)
-+		if errno != 0 {
-+			return E.New(errno.Error())
-+		}
-+		return nil
-+	})
-+	if err != nil {
-+		return os.NewSyscallError("SIOCSIFNAME", err)
-+	}
-+	return nil
-+}
-+
-+func setTunAddress(name string, options Options) error {
-+	if len(options.Inet4Address) > 0 {
-+		err := runCommand(fmt.Sprintf("/sbin/ifconfig %s inet %s up", name, options.Inet4Address[0].String()))
-+		if err != nil {
-+			return err
-+		}
-+	}
-+	if len(options.Inet6Address) > 0 {
-+		err := runCommand(fmt.Sprintf("/sbin/ifconfig %s inet6 %s up", name, options.Inet6Address[0].String()))
-+		if err != nil {
-+			return err
-+		}
-+	}
-+	return nil
-+}
-+
-+const resolvPath = "/etc/resolv.conf"
-+
-+func setDNSServers(options Options) (string, error) {
-+	resolvByte, err := os.ReadFile(resolvPath)
-+	if err != nil {
-+		return "", err
-+	}
-+	resolvString := unix.ByteSliceToString(resolvByte[:])
-+	var sb strings.Builder
-+	sb.WriteString("search localdomain\n")
-+	if len(options.Inet4Address) > 0 {
-+		sb.WriteString(fmt.Sprintf("nameserver %s\n", options.Inet4Address[0].Addr().Next().String()))
-+	}
-+	if len(options.Inet6Address) > 0 {
-+		sb.WriteString(fmt.Sprintf("nameserver %s\n", options.Inet6Address[0].Addr().Next().String()))
-+	}
-+	newResolvByte := []byte(sb.String())
-+	err = os.WriteFile(resolvPath, newResolvByte[:], 0644)
-+	if err != nil {
-+		return resolvString, err
-+	}
-+	return resolvString, nil
-+}
-+
-+func restoreDNSServers(resolvString string) error {
-+	resolvByte := []byte(resolvString)
-+	err := os.WriteFile(resolvPath, resolvByte[:], 0644)
-+	if err != nil {
-+		return err
-+	}
-+	return nil
-+}
-+
-+func runCommand(commandStr string) error {
-+	var command *exec.Cmd
-+	command = exec.Command(
-+		"/bin/sh", "-c", commandStr)
-+	combinedOutput, err := command.CombinedOutput()
-+	if err != nil {
-+		return E.New(commandStr, ": ", string(combinedOutput))
-+	}
-+	return nil
-+}
-+
-+func (t *NativeTun) UpdateRouteOptions(tunOptions Options) error {
-+	err := t.unsetRoutes()
-+	if err != nil {
-+		return err
-+	}
-+	t.options = tunOptions
-+	return t.setRoutes()
-+}
-+
-+func (t *NativeTun) setRoutes() error {
-+	if t.options.FileDescriptor == 0 {
-+		routeRanges, err := t.options.BuildAutoRouteRanges(false)
-+		if err != nil {
-+			return err
-+		}
-+		if len(routeRanges) > 0 {
-+			gateway4, gateway6 := t.options.Inet4GatewayAddr(), t.options.Inet6GatewayAddr()
-+			for _, destination := range routeRanges {
-+				var gateway netip.Addr
-+				if destination.Addr().Is4() {
-+					gateway = gateway4
-+				} else {
-+					gateway = gateway6
-+				}
-+				err = execRoute(unix.RTM_ADD, destination, gateway)
-+				if err != nil {
-+					if errors.Is(err, unix.EEXIST) {
-+						err = execRoute(unix.RTM_DELETE, destination, gateway)
-+						if err != nil {
-+							return E.Cause(err, "remove existing route: ", destination)
-+						}
-+						err = execRoute(unix.RTM_ADD, destination, gateway)
-+						if err != nil {
-+							return E.Cause(err, "re-add route: ", destination)
-+						}
-+					} else {
-+						return E.Cause(err, "add route: ", destination)
-+					}
-+				}
-+			}
-+			t.routeSet = true
-+		}
-+	}
-+	return nil
-+}
-+
-+func (t *NativeTun) unsetRoutes() error {
-+	if !t.routeSet {
-+		return nil
-+	}
-+	routeRanges, err := t.options.BuildAutoRouteRanges(false)
-+	if err != nil {
-+		return err
-+	}
-+	gateway4, gateway6 := t.options.Inet4GatewayAddr(), t.options.Inet6GatewayAddr()
-+	for _, destination := range routeRanges {
-+		var gateway netip.Addr
-+		if destination.Addr().Is4() {
-+			gateway = gateway4
-+		} else {
-+			gateway = gateway6
-+		}
-+		err = execRoute(unix.RTM_DELETE, destination, gateway)
-+		if err != nil {
-+			err = E.Errors(err, E.Cause(err, "delete route: ", destination))
-+		}
-+	}
-+	return err
-+}
-+
-+func useSocket(domain, typ, proto int, block func(socketFd int) error) error {
-+	socketFd, err := unix.Socket(domain, typ, proto)
-+	if err != nil {
-+		return err
-+	}
-+	defer unix.Close(socketFd)
-+	return block(socketFd)
-+}
-+
-+func useFd(tunFile *os.File, block func(fd uintptr)) error {
-+	sysconn, err := tunFile.SyscallConn()
-+	if err != nil {
-+		return err
-+	}
-+	return sysconn.Control(block)
-+}
-+
-+func execRoute(rtmType int, destination netip.Prefix, gateway netip.Addr) error {
-+	routeMessage := route.RouteMessage{
-+		Type:    rtmType,
-+		Version: unix.RTM_VERSION,
-+		Flags:   unix.RTF_STATIC | unix.RTF_GATEWAY,
-+		Seq:     1,
-+	}
-+	if rtmType == unix.RTM_ADD {
-+		routeMessage.Flags |= unix.RTF_UP
-+	}
-+	if gateway.Is4() {
-+		routeMessage.Addrs = []route.Addr{
-+			syscall.RTAX_DST:     &route.Inet4Addr{IP: destination.Addr().As4()},
-+			syscall.RTAX_NETMASK: &route.Inet4Addr{IP: netip.MustParseAddr(net.IP(net.CIDRMask(destination.Bits(), 32)).String()).As4()},
-+			syscall.RTAX_GATEWAY: &route.Inet4Addr{IP: gateway.As4()},
-+		}
-+	} else {
-+		routeMessage.Addrs = []route.Addr{
-+			syscall.RTAX_DST:     &route.Inet6Addr{IP: destination.Addr().As16()},
-+			syscall.RTAX_NETMASK: &route.Inet6Addr{IP: netip.MustParseAddr(net.IP(net.CIDRMask(destination.Bits(), 128)).String()).As16()},
-+			syscall.RTAX_GATEWAY: &route.Inet6Addr{IP: gateway.As16()},
-+		}
-+	}
-+	request, err := routeMessage.Marshal()
-+	if err != nil {
-+		return err
-+	}
-+	return useSocket(unix.AF_ROUTE, unix.SOCK_RAW, 0, func(socketFd int) error {
-+		err := unix.SetsockoptInt(socketFd, unix.SOL_SOCKET, unix.SO_SETFIB, syscall.RT_DEFAULT_FIB)
-+		if err != nil {
-+			return os.NewSyscallError("SO_SETFIB", err)
-+		}
-+		return common.Error(unix.Write(socketFd, request))
-+	})
-+}
-diff --git a/tun_nondarwin.go b/tun_nondarwin.go
-index 0faa2c9..547ddfa 100644
---- a/tun_nondarwin.go
-+++ b/tun_nondarwin.go
-@@ -1,4 +1,4 @@
--//go:build !darwin
-+//go:build !(darwin || freebsd || openbsd)
- 
- package tun
- 
-diff --git a/tun_openbsd.go b/tun_openbsd.go
-new file mode 100644
-index 0000000..d436fcd
---- /dev/null
-+++ b/tun_openbsd.go
-@@ -0,0 +1,488 @@
-+/* SPDX-License-Identifier: MIT
-+ *
-+ * Copyright (C) 2017-2023 WireGuard LLC. All Rights Reserved.
-+ */
-+// The code about tun configuration was obtained partially from wireguard-go.
-+
-+package tun
-+
-+import (
-+	"bufio"
-+	"errors"
-+	"fmt"
-+	"io"
-+	"net"
-+	"net/netip"
-+	"os"
-+	"os/exec"
-+	"strings"
-+	"syscall"
-+	"unsafe"
-+
-+	"github.com/sagernet/sing-tun/internal/gtcpip/header"
-+	"github.com/sagernet/sing/common"
-+	"github.com/sagernet/sing/common/buf"
-+	E "github.com/sagernet/sing/common/exceptions"
-+
-+	"golang.org/x/net/route"
-+	"golang.org/x/sys/unix"
-+)
-+
-+const PacketOffset = 4
-+
-+type NativeTun struct {
-+	tunFile      *os.File
-+	tunResolv    string
-+	options      Options
-+	inet4Address [4]byte
-+	inet6Address [16]byte
-+	routeSet     bool
-+}
-+
-+func (t *NativeTun) Name() (string, error) {
-+	return getTUnName(t.tunFile)
-+}
-+
-+func New(options Options) (Tun, error) {
-+	var nativeTun *NativeTun
-+	var tunFd int
-+	if options.FileDescriptor == 0 {
-+		ifIndex := -1
-+		_, err := fmt.Sscanf(options.Name, "tun%d", &ifIndex)
-+		if err != nil || ifIndex < 0 {
-+			return nil, E.New("bad tun name: ", options.Name)
-+		}
-+
-+		tunFile, err := os.OpenFile(fmt.Sprintf("/dev/tun%d", ifIndex), unix.O_RDWR|unix.O_CLOEXEC, 0)
-+		if err != nil {
-+			return nil, err
-+		}
-+
-+		err = configure(options.Name, options)
-+		if err != nil {
-+			return nil, E.Errors(err, tunFile.Close())
-+		}
-+
-+		var resolvString string = ""
-+		if options.AutoRoute {
-+			err := checkDHCP(options.InterfaceMonitor.DefaultInterface().Name)
-+			if err != nil {
-+				return nil, E.Errors(err, tunFile.Close())
-+			}
-+			resolvString, err = setDNSServers(options)
-+			if err != nil {
-+				return nil, E.Errors(err, tunFile.Close())
-+			}
-+		}
-+
-+		nativeTun = &NativeTun{
-+			tunFile:   tunFile,
-+			options:   options,
-+			tunResolv: resolvString,
-+		}
-+	} else {
-+		tunFd = options.FileDescriptor
-+		nativeTun = &NativeTun{
-+			tunFile: os.NewFile(uintptr(tunFd), "utun"),
-+			options: options,
-+		}
-+	}
-+
-+	if len(options.Inet4Address) > 0 {
-+		nativeTun.inet4Address = options.Inet4Address[0].Addr().As4()
-+	}
-+	if len(options.Inet6Address) > 0 {
-+		nativeTun.inet6Address = options.Inet6Address[0].Addr().As16()
-+	}
-+	return nativeTun, nil
-+}
-+
-+func (t *NativeTun) Start() error {
-+	t.options.InterfaceMonitor.RegisterMyInterface(t.options.Name)
-+	return t.setRoutes()
-+}
-+
-+func (t *NativeTun) Close() error {
-+	if t.options.AutoRoute {
-+		return E.Errors(restoreDNSServers(t.tunResolv), t.unsetRoutes(), t.tunFile.Close())
-+	}
-+	return E.Errors(t.unsetRoutes(), t.tunFile.Close())
-+}
-+
-+func (t *NativeTun) Read(p []byte) (n int, err error) {
-+	return t.tunFile.Read(p)
-+}
-+
-+func (t *NativeTun) Write(p []byte) (n int, err error) {
-+	//To prevent "address family not supported by protocol family"
-+	switch uint(p[3]) {
-+	case unix.AF_INET:
-+		copy(p[:4], packetHeader4[:])
-+	case unix.AF_INET6:
-+		copy(p[:4], packetHeader6[:])
-+	}
-+	return t.tunFile.Write(p)
-+}
-+
-+var (
-+	packetHeader4 = [4]byte{0x00, 0x00, 0x00, unix.AF_INET}
-+	packetHeader6 = [4]byte{0x00, 0x00, 0x00, unix.AF_INET6}
-+)
-+
-+func (t *NativeTun) WriteVectorised(buffers []*buf.Buffer) error {
-+	var packetHeader []byte
-+	switch header.IPVersion(buffers[0].Bytes()) {
-+	case header.IPv4Version:
-+		packetHeader = packetHeader4[:]
-+	case header.IPv6Version:
-+		packetHeader = packetHeader6[:]
-+	}
-+	// syscall.SYS_WRITEV is not implemented
-+	newBuffers := append([]*buf.Buffer{buf.As(packetHeader)}, buffers...)
-+	var newByte []byte
-+	for _, buffer := range newBuffers {
-+		newByte = append(newByte, buffer.Bytes()...)
-+	}
-+	_, err := t.tunFile.Write(newByte)
-+	return err
-+}
-+
-+const (
-+	SIOCAIFADDR_IN6       = 2155899162
-+	IN6_IFF_NODAD         = 0x0020
-+	ND6_INFINITE_LIFETIME = 0xFFFFFFFF
-+)
-+
-+type IfreqMTU struct {
-+	Name [unix.IFNAMSIZ]byte
-+	MTU  int32
-+}
-+
-+type ifAliasReq struct {
-+	Name    [unix.IFNAMSIZ]byte
-+	Addr    unix.RawSockaddrInet4
-+	Dstaddr unix.RawSockaddrInet4
-+	Mask    unix.RawSockaddrInet4
-+}
-+
-+type ifAliasReq6 struct {
-+	Name     [16]byte
-+	Addr     unix.RawSockaddrInet6
-+	Dstaddr  unix.RawSockaddrInet6
-+	Mask     unix.RawSockaddrInet6
-+	Flags    uint32
-+	Lifetime addrLifetime6
-+}
-+
-+type addrLifetime6 struct {
-+	Expire    float64
-+	Preferred float64
-+	Vltime    uint32
-+	Pltime    uint32
-+}
-+
-+func getTUnName(tunFile *os.File) (string, error) {
-+	gostat, err := tunFile.Stat()
-+	if err != nil {
-+		return "", err
-+	}
-+	stat := gostat.Sys().(*syscall.Stat_t)
-+	return fmt.Sprintf("tun%d", stat.Rdev%256), nil
-+}
-+
-+func configure(name string, options Options) error {
-+	err := useSocket(unix.AF_INET, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0, func(socketFd int) error {
-+		var ifr IfreqMTU
-+		copy(ifr.Name[:], name)
-+		ifr.MTU = int32(options.MTU)
-+		_, _, errno := unix.Syscall(
-+			syscall.SYS_IOCTL,
-+			uintptr(socketFd),
-+			uintptr(unix.SIOCSIFMTU),
-+			uintptr(unsafe.Pointer(&ifr)),
-+		)
-+		if errno != 0 {
-+			return os.NewSyscallError("SIOCSIFMTU", errno)
-+		}
-+		return nil
-+	})
-+	if err != nil {
-+		return err
-+	}
-+
-+	if len(options.Inet4Address) > 0 {
-+		for _, address := range options.Inet4Address {
-+			ifReq := ifAliasReq{
-+				Addr: unix.RawSockaddrInet4{
-+					Len:    unix.SizeofSockaddrInet4,
-+					Family: unix.AF_INET,
-+					Addr:   address.Addr().As4(),
-+				},
-+				Dstaddr: unix.RawSockaddrInet4{
-+					Len:    unix.SizeofSockaddrInet4,
-+					Family: unix.AF_INET,
-+					Addr:   address.Addr().As4(),
-+				},
-+				Mask: unix.RawSockaddrInet4{
-+					Len:    unix.SizeofSockaddrInet4,
-+					Family: unix.AF_INET,
-+					Addr:   netip.MustParseAddr(net.IP(net.CIDRMask(address.Bits(), 32)).String()).As4(),
-+				},
-+			}
-+			copy(ifReq.Name[:], name)
-+			err = useSocket(unix.AF_INET, unix.SOCK_DGRAM, 0, func(socketFd int) error {
-+				if _, _, errno := unix.Syscall(
-+					syscall.SYS_IOCTL,
-+					uintptr(socketFd),
-+					uintptr(unix.SIOCAIFADDR),
-+					uintptr(unsafe.Pointer(&ifReq)),
-+				); errno != 0 {
-+					return os.NewSyscallError("SIOCAIFADDR", errno)
-+				}
-+				return nil
-+			})
-+			if err != nil {
-+				return err
-+			}
-+		}
-+	}
-+	if len(options.Inet6Address) > 0 {
-+		for _, address := range options.Inet6Address {
-+			ifReq6 := ifAliasReq6{
-+				Addr: unix.RawSockaddrInet6{
-+					Len:    unix.SizeofSockaddrInet6,
-+					Family: unix.AF_INET6,
-+					Addr:   address.Addr().As16(),
-+				},
-+				Mask: unix.RawSockaddrInet6{
-+					Len:    unix.SizeofSockaddrInet6,
-+					Family: unix.AF_INET6,
-+					Addr:   netip.MustParseAddr(net.IP(net.CIDRMask(address.Bits(), 128)).String()).As16(),
-+				},
-+				Flags: IN6_IFF_NODAD,
-+				Lifetime: addrLifetime6{
-+					Vltime: ND6_INFINITE_LIFETIME,
-+					Pltime: ND6_INFINITE_LIFETIME,
-+				},
-+			}
-+			if address.Bits() == 128 {
-+				ifReq6.Dstaddr = unix.RawSockaddrInet6{
-+					Len:    unix.SizeofSockaddrInet6,
-+					Family: unix.AF_INET6,
-+					Addr:   address.Addr().Next().As16(),
-+				}
-+			}
-+			copy(ifReq6.Name[:], name)
-+			err = useSocket(unix.AF_INET6, unix.SOCK_DGRAM, 0, func(socketFd int) error {
-+				if _, _, errno := unix.Syscall(
-+					syscall.SYS_IOCTL,
-+					uintptr(socketFd),
-+					uintptr(SIOCAIFADDR_IN6),
-+					uintptr(unsafe.Pointer(&ifReq6)),
-+				); errno != 0 {
-+					return os.NewSyscallError("SIOCAIFADDR_IN6", errno)
-+				}
-+				return nil
-+			})
-+			if err != nil {
-+				return err
-+			}
-+		}
-+	}
-+	return nil
-+}
-+
-+const resolvPath = "/etc/resolv.conf"
-+const dhcpleasedPath = "/etc/dhcpleased.conf"
-+
-+func checkDHCP(name string) error {
-+	_, err := exec.Command("rcctl", "check", "dhcpleased").CombinedOutput()
-+	if err != nil {
-+		return nil
-+	}
-+
-+	ErrNoIgnoreDNS := fmt.Errorf("please add `ignore dns` option for interface %s in %s", name, dhcpleasedPath)
-+	file, err := os.OpenFile(dhcpleasedPath, os.O_RDONLY, 0644)
-+	if err != nil {
-+		if errors.Is(err, os.ErrNotExist) {
-+			return ErrNoIgnoreDNS
-+		}
-+		return err
-+	}
-+	defer file.Close()
-+	reader := bufio.NewReader(file)
-+	var sb strings.Builder
-+	for {
-+		line, err := reader.ReadString('\n')
-+		line = strings.TrimSpace(line)
-+		if err != nil {
-+			if err != io.EOF {
-+				return err
-+			}
-+			if len(line) == 0 {
-+				break
-+			}
-+		}
-+		if len(line) == 0 || line[0] == '#' {
-+			continue
-+		}
-+		sb.WriteString(line)
-+	}
-+	dhcpleasedString := sb.String()
-+	containIf := strings.Contains(dhcpleasedString, fmt.Sprintf("interface %s", name))
-+	containIgnore := strings.Contains(dhcpleasedString, "ignore dns")
-+	if !(containIf && containIgnore) {
-+		return ErrNoIgnoreDNS
-+	}
-+	return nil
-+}
-+
-+func setDNSServers(options Options) (string, error) {
-+	resolvByte, err := os.ReadFile(resolvPath)
-+	if err != nil {
-+		return "", err
-+	}
-+	resolvString := unix.ByteSliceToString(resolvByte[:])
-+	var sb strings.Builder
-+	sb.WriteString("search localdomain\n")
-+	if len(options.Inet4Address) > 0 {
-+		sb.WriteString(fmt.Sprintf("nameserver %s\n", options.Inet4Address[0].Addr().Next().String()))
-+	}
-+	if len(options.Inet6Address) > 0 {
-+		sb.WriteString(fmt.Sprintf("nameserver %s\n", options.Inet6Address[0].Addr().Next().String()))
-+	}
-+	newResolvByte := []byte(sb.String())
-+	err = os.WriteFile(resolvPath, newResolvByte[:], 0644)
-+	if err != nil {
-+		return resolvString, err
-+	}
-+	return resolvString, nil
-+}
-+
-+func restoreDNSServers(resolvString string) error {
-+	resolvByte := []byte(resolvString)
-+	err := os.WriteFile(resolvPath, resolvByte[:], 0644)
-+	if err != nil {
-+		return err
-+	}
-+	return nil
-+}
-+
-+func (t *NativeTun) UpdateRouteOptions(tunOptions Options) error {
-+	err := t.unsetRoutes()
-+	if err != nil {
-+		return err
-+	}
-+	t.options = tunOptions
-+	return t.setRoutes()
-+}
-+
-+func (t *NativeTun) setRoutes() error {
-+	if t.options.FileDescriptor == 0 {
-+		var routeRanges = []netip.Prefix{}
-+		if len(t.options.Inet4Address) > 0 {
-+			routeRanges = append(routeRanges, t.options.Inet4Address[0])
-+		}
-+		if len(t.options.Inet6Address) > 0 {
-+			routeRanges = append(routeRanges, t.options.Inet6Address[0])
-+		}
-+		autoRouteRanges, err := t.options.BuildAutoRouteRanges(false)
-+		if err != nil {
-+			return err
-+		}
-+		routeRanges = append(routeRanges, autoRouteRanges...)
-+		if len(routeRanges) > 0 {
-+			gateway4, gateway6 := t.options.Inet4GatewayAddr(), t.options.Inet6GatewayAddr()
-+			for _, destination := range routeRanges {
-+				var gateway netip.Addr
-+				if destination.Addr().Is4() {
-+					gateway = gateway4
-+				} else {
-+					gateway = gateway6
-+				}
-+				err = execRoute(unix.RTM_ADD, destination, gateway)
-+				if err != nil {
-+					if errors.Is(err, unix.EEXIST) {
-+						err = execRoute(unix.RTM_DELETE, destination, gateway)
-+						if err != nil {
-+							return E.Cause(err, "remove existing route: ", destination)
-+						}
-+						err = execRoute(unix.RTM_ADD, destination, gateway)
-+						if err != nil {
-+							return E.Cause(err, "re-add route: ", destination)
-+						}
-+					} else {
-+						return E.Cause(err, "add route: ", destination)
-+					}
-+				}
-+			}
-+			t.routeSet = true
-+		}
-+	}
-+	return nil
-+}
-+
-+func (t *NativeTun) unsetRoutes() error {
-+	if !t.routeSet {
-+		return nil
-+	}
-+	routeRanges, err := t.options.BuildAutoRouteRanges(false)
-+	if err != nil {
-+		return err
-+	}
-+	gateway4, gateway6 := t.options.Inet4GatewayAddr(), t.options.Inet6GatewayAddr()
-+	for _, destination := range routeRanges {
-+		var gateway netip.Addr
-+		if destination.Addr().Is4() {
-+			gateway = gateway4
-+		} else {
-+			gateway = gateway6
-+		}
-+		err = execRoute(unix.RTM_DELETE, destination, gateway)
-+		if err != nil {
-+			err = E.Errors(err, E.Cause(err, "delete route: ", destination))
-+		}
-+	}
-+	return err
-+}
-+
-+func useSocket(domain, typ, proto int, block func(socketFd int) error) error {
-+	socketFd, err := unix.Socket(domain, typ, proto)
-+	if err != nil {
-+		return err
-+	}
-+	defer unix.Close(socketFd)
-+	return block(socketFd)
-+}
-+
-+func execRoute(rtmType int, destination netip.Prefix, gateway netip.Addr) error {
-+	routeMessage := route.RouteMessage{
-+		Type:    rtmType,
-+		Version: unix.RTM_VERSION,
-+		Flags:   unix.RTF_STATIC | unix.RTF_GATEWAY,
-+		Seq:     1,
-+	}
-+	if rtmType == unix.RTM_ADD {
-+		routeMessage.Flags |= unix.RTF_UP
-+	}
-+	if gateway.Is4() {
-+		routeMessage.Addrs = []route.Addr{
-+			syscall.RTAX_DST:     &route.Inet4Addr{IP: destination.Addr().As4()},
-+			syscall.RTAX_NETMASK: &route.Inet4Addr{IP: netip.MustParseAddr(net.IP(net.CIDRMask(destination.Bits(), 32)).String()).As4()},
-+			syscall.RTAX_GATEWAY: &route.Inet4Addr{IP: gateway.As4()},
-+		}
-+	} else {
-+		routeMessage.Addrs = []route.Addr{
-+			syscall.RTAX_DST:     &route.Inet6Addr{IP: destination.Addr().As16()},
-+			syscall.RTAX_NETMASK: &route.Inet6Addr{IP: netip.MustParseAddr(net.IP(net.CIDRMask(destination.Bits(), 128)).String()).As16()},
-+			syscall.RTAX_GATEWAY: &route.Inet6Addr{IP: gateway.As16()},
-+		}
-+	}
-+	request, err := routeMessage.Marshal()
-+	if err != nil {
-+		return err
-+	}
-+	return useSocket(unix.AF_ROUTE, unix.SOCK_RAW, 0, func(socketFd int) error {
-+		return common.Error(unix.Write(socketFd, request))
-+	})
-+}
-diff --git a/tun_other.go b/tun_other.go
-index 1db48f9..d8fb2e1 100644
---- a/tun_other.go
-+++ b/tun_other.go
-@@ -1,4 +1,4 @@
--//go:build !(linux || windows || darwin)
-+//go:build !(linux || windows || darwin || freebsd || openbsd)
- 
- package tun
- 
-diff --git a/tun_rules.go b/tun_rules.go
-index c1b983f..56f7a0e 100644
---- a/tun_rules.go
-+++ b/tun_rules.go
-@@ -104,7 +104,8 @@ func buildExcludedRanges(includeRanges []ranges.Range[uint32], excludeRanges []r
- 	return ranges.Merge(uidRanges)
- }
- 
--const autoRouteUseSubRanges = runtime.GOOS == "darwin"
-+const autoRouteUseSubRanges = runtime.GOOS == "darwin" || runtime.GOOS == "freebsd"
-+const autoRouteUseFakeIPRanges = runtime.GOOS == "openbsd" || runtime.GOOS == "dragonfly" || runtime.GOOS == "netbsd"
- 
- func (o *Options) BuildAutoRouteRanges(underNetworkExtension bool) ([]netip.Prefix, error) {
- 	var routeRanges []netip.Prefix
-@@ -131,6 +132,8 @@ func (o *Options) BuildAutoRouteRanges(underNetworkExtension bool) ([]netip.Pref
- 					netip.PrefixFrom(netip.AddrFrom4([4]byte{0: 64}), 2),
- 					netip.PrefixFrom(netip.AddrFrom4([4]byte{0: 128}), 1),
- 				}
-+			} else if autoRouteUseFakeIPRanges {
-+				return []netip.Prefix{}, E.New("please use FakeIP ranges")
- 			} else {
- 				inet4Ranges = []netip.Prefix{netip.PrefixFrom(netip.IPv4Unspecified(), 0)}
- 			}
-@@ -181,6 +184,8 @@ func (o *Options) BuildAutoRouteRanges(underNetworkExtension bool) ([]netip.Pref
- 					netip.PrefixFrom(netip.AddrFrom16([16]byte{0: 64}), 2),
- 					netip.PrefixFrom(netip.AddrFrom16([16]byte{0: 128}), 1),
- 				}
-+			} else if autoRouteUseFakeIPRanges {
-+				return []netip.Prefix{}, E.New("please use FakeIP ranges")
- 			} else {
- 				inet6Ranges = []netip.Prefix{netip.PrefixFrom(netip.IPv6Unspecified(), 0)}
- 			}
++replace github.com/sagernet/sing-tun v0.7.3 => ../sing-tun-official
+diff --git a/option/tun.go b/option/tun.go
+index 89affb23..7ca2e237 100644
+--- a/option/tun.go
++++ b/option/tun.go
+@@ -17,6 +17,7 @@ type TunInboundOptions struct {
+ 	AutoRoute              bool                             `json:"auto_route,omitempty"`
+ 	IPRoute2TableIndex     int                              `json:"iproute2_table_index,omitempty"`
+ 	IPRoute2RuleIndex      int                              `json:"iproute2_rule_index,omitempty"`
++	FIBIndex               int                              `json:"fib_index,omitempty"`
+ 	AutoRedirect           bool                             `json:"auto_redirect,omitempty"`
+ 	AutoRedirectInputMark  FwMark                           `json:"auto_redirect_input_mark,omitempty"`
+ 	AutoRedirectOutputMark FwMark                           `json:"auto_redirect_output_mark,omitempty"`
+diff --git a/protocol/tun/inbound.go b/protocol/tun/inbound.go
+index fc69309c..d7ee799a 100644
+--- a/protocol/tun/inbound.go
++++ b/protocol/tun/inbound.go
+@@ -18,7 +18,7 @@ import (
+ 	"github.com/sagernet/sing-box/experimental/libbox/platform"
+ 	"github.com/sagernet/sing-box/log"
+ 	"github.com/sagernet/sing-box/option"
+-	"github.com/sagernet/sing-tun"
++	tun "github.com/sagernet/sing-tun"
+ 	"github.com/sagernet/sing/common"
+ 	E "github.com/sagernet/sing/common/exceptions"
+ 	"github.com/sagernet/sing/common/json/badoption"
+@@ -174,6 +174,10 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
+ 	if ruleIndex == 0 {
+ 		ruleIndex = tun.DefaultIPRoute2RuleIndex
+ 	}
++	fibIndex := options.FIBIndex
++	if fibIndex == 0 {
++		fibIndex = tun.DefaultFIBIndex
++	}
+ 	inputMark := uint32(options.AutoRedirectInputMark)
+ 	if inputMark == 0 {
+ 		inputMark = tun.DefaultAutoRedirectInputMark
+@@ -200,6 +204,7 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
+ 			AutoRoute:                options.AutoRoute,
+ 			IPRoute2TableIndex:       tableIndex,
+ 			IPRoute2RuleIndex:        ruleIndex,
++			FIBIndex:                 fibIndex,
+ 			AutoRedirectInputMark:    inputMark,
+ 			AutoRedirectOutputMark:   outputMark,
+ 			Inet4LoopbackAddress:     common.Filter(options.LoopbackAddress, netip.Addr.Is4),
