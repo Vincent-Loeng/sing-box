@@ -23,7 +23,7 @@ jobs:
 
       - name: Set variables
         run: |
-          latest_version=$(curl -sSL https://api.github.com/repos/Sagernet/sing-box/releases | jq -r 'map(select(.prerelease)) | first | .tag_name' | sed 's|v||g')
+          latest_version=$(curl -sSL https://api.github.com/repos/Sagernet/sing-box/releases | jq -r 'map(select(.release)) | first | .tag_name' | sed 's|v||g')
           echo "RELEASE_NAME=${latest_version}-vincent" >> $GITHUB_ENV
           echo "TAG_NAME=v${latest_version}-vincent" >> $GITHUB_ENV
           echo "tags=with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale" >> $GITHUB_ENV
