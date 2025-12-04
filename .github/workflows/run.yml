@@ -75,7 +75,7 @@ jobs:
         if: ${{ env.BUILD == 'true' }}
         run: |
           cd sing-box
-          os_array=(freebsd openbsd)
+          os_array=(freebsd)
           arch_array=(amd64 386 arm arm64)
           for os in ${os_array[@]}; do
             for arch in ${arch_array[@]}; do
