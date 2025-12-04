@@ -448,16 +448,6 @@ index 3d60afeb..3ee166dd 100644
  
  package redir
  
-diff --git a/go.mod b/go.mod
-index bb72af34..a0ae23b7 100644
---- a/go.mod
-+++ b/go.mod
-@@ -133,3 +133,5 @@ require (
- 	gopkg.in/yaml.v3 v3.0.1 // indirect
- 	lukechampine.com/blake3 v1.3.0 // indirect
- )
-+
-+replace github.com/sagernet/sing-tun v0.7.3 => ../sing-tun-official
 diff --git a/option/tun.go b/option/tun.go
 index 89affb23..7ca2e237 100644
 --- a/option/tun.go
