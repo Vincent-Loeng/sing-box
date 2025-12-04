@@ -448,6 +448,16 @@ index 3d60afeb..3ee166dd 100644
  
  package redir
  
+diff --git a/go.mod b/go.mod
+index bb72af34..a0ae23b7 100644
+--- a/go.mod
++++ b/go.mod
+@@ -133,3 +133,5 @@ require (
+ 	gopkg.in/yaml.v3 v3.0.1 // indirect
+ 	lukechampine.com/blake3 v1.3.0 // indirect
+ )
++
++replace github.com/sagernet/sing-tun v0.7.3 => ../sing-tun-official
 diff --git a/option/tun.go b/option/tun.go
 index 89affb23..7ca2e237 100644
 --- a/option/tun.go
@@ -461,10 +471,19 @@ index 89affb23..7ca2e237 100644
  	AutoRedirectInputMark  FwMark                           `json:"auto_redirect_input_mark,omitempty"`
  	AutoRedirectOutputMark FwMark                           `json:"auto_redirect_output_mark,omitempty"`
 diff --git a/protocol/tun/inbound.go b/protocol/tun/inbound.go
-index 36714abe..003319f3 100644
+index fc69309c..d7ee799a 100644
 --- a/protocol/tun/inbound.go
 +++ b/protocol/tun/inbound.go
-@@ -164,6 +164,10 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
+@@ -18,7 +18,7 @@ import (
+ 	"github.com/sagernet/sing-box/experimental/libbox/platform"
+ 	"github.com/sagernet/sing-box/log"
+ 	"github.com/sagernet/sing-box/option"
+-	"github.com/sagernet/sing-tun"
++	tun "github.com/sagernet/sing-tun"
+ 	"github.com/sagernet/sing/common"
+ 	E "github.com/sagernet/sing/common/exceptions"
+ 	"github.com/sagernet/sing/common/json/badoption"
+@@ -174,6 +174,10 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
  	if ruleIndex == 0 {
  		ruleIndex = tun.DefaultIPRoute2RuleIndex
  	}
@@ -475,7 +494,7 @@ index 36714abe..003319f3 100644
  	inputMark := uint32(options.AutoRedirectInputMark)
  	if inputMark == 0 {
  		inputMark = tun.DefaultAutoRedirectInputMark
-@@ -188,6 +192,7 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
+@@ -200,6 +204,7 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
  			AutoRoute:                options.AutoRoute,
  			IPRoute2TableIndex:       tableIndex,
  			IPRoute2RuleIndex:        ruleIndex,
