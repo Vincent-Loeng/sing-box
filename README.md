@@ -3,9 +3,9 @@
 
 精力有限，可能不再维护，目前足以加速某些网站，比如 OpenAI
 
-**Currently, only beta versions are supported**
+**Currently, only release versions are supported**
 
-目前，仅更新 beta 版
+目前，仅更新 release 版
 
 ---
 
