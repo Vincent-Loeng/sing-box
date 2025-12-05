@@ -34,6 +34,20 @@ jobs:
         with:
           ref: hidden
 
+      - name: Apply patches
+        #if: ${{ env.BUILD == 'true' }}
+        run: |
+          git clone --depth 1 -b main https://github.com/Sagernet/sing-tun.git sing-tun
+          git clone --depth 1 -b main https://github.com/Sagernet/sing-box.git sing-box
+          ls -lha
+          cd sing-tun
+          patch -p1 < ../sing-tun.patch
+          cp monitor_darwin.go monitor_freebsd.go
+          cd ../sing-box
+          patch -p1 < ../sing-box.patch
+          sing_tun_version=$(cat go.mod | grep github.com/sagernet/sing-tun | awk '{ print $2 }')
+          echo -e "\nreplace github.com/sagernet/sing-tun ${sing_tun_version} => ../sing-tun" >> go.mod
+
       - name: Check for new version
         run: |
           if [ -f last_version ]; then
@@ -48,20 +62,6 @@ jobs:
           else
             echo "BUILD=false" >> $GITHUB_ENV
           fi
-
-      - name: Apply patches
-        #if: ${{ env.BUILD == 'true' }}
-        run: |
-          git clone --depth 1 -b main https://github.com/Sagernet/sing-tun.git sing-tun
-          git clone --depth 1 -b main https://github.com/Sagernet/sing-box.git sing-box
-          ls -lha
-          cd sing-tun
-          patch -p1 < ../sing-tun.patch
-          cp monitor_darwin.go monitor_freebsd.go
-          cd ../sing-box
-          patch -p1 < ../sing-box.patch
-          sing_tun_version=$(cat go.mod | grep github.com/sagernet/sing-tun | awk '{ print $2 }')
-          echo -e "\nreplace github.com/sagernet/sing-tun ${sing_tun_version} => ../sing-tun" >> go.mod
 
       - name: Setup Go
         if: ${{ env.BUILD == 'true' }}
