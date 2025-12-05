@@ -33,7 +33,7 @@ This self-use repo automatically builds the latest version of sing-box with patc
 
    自 1.12.0-beta.20-vincent-auto 起，FreeBSD/OpenBSD 支持 redirect
 
-4. Subscription is supported in `reF1nd` core, please refer to [the document](https://github.com/reF1nd/sing-box/blob/reF1nd-dev/docs/configuration/provider/index.md)
+4. Subscription is supported on `reF1nd` core, please refer to [the document](https://github.com/reF1nd/sing-box/blob/reF1nd-dev/docs/configuration/provider/index.md)
 
    `reF1nd`核心支持订阅，请参考[文档](https://github.com/reF1nd/sing-box/blob/reF1nd-dev/docs/configuration/provider/index.zh.md)，第三方核心的订阅功能较为相似，使用上区别小，选此核心仅为尽量满足订阅外的其他需求
 
