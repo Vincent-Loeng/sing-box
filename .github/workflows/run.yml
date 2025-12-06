@@ -74,7 +74,7 @@ jobs:
         run: |
           cd sing-box
           os_array=(freebsd)
-          arch_array=(amd64 386 arm arm64)
+          arch_array=(amd64 386 arm arm64 riscv64)
           for os in ${os_array[@]}; do
             for arch in ${arch_array[@]}; do
               GOOS=${os} GOARCH=${arch} CGO_ENABLED=0 go build -v -trimpath -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${RELEASE_NAME}' -s -w -buildid=" -tags ${tags} ./cmd/sing-box
