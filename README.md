@@ -23,15 +23,15 @@ This self-use repo automatically builds the latest version of sing-box with patc
 
 1. Tun interface is supported on FreeBSD/OpenBSD
 
-   FreeBSD/OpenBSD 支持 Tun 网卡
+   在 FreeBSD/OpenBSD 平台上支持 Tun 网卡
 
 2. Matching process is supported on FreeBSD since 1.12.0-beta.15-vincent-2
 
-   自 1.12.0-beta.15-vincent-2 起，FreeBSD 支持进程匹配
+   自 1.12.0-beta.15-vincent-2 起，在 FreeBSD 平台上支持进程匹配
 
 3. Redirect is supported on FreeBSD/OpenBSD since 1.12.0-beta.20-vincent-auto
 
-   自 1.12.0-beta.20-vincent-auto 起，FreeBSD/OpenBSD 支持 redirect
+   自 1.12.0-beta.20-vincent-auto 起，在 FreeBSD/OpenBSD 平台上支持 redirect
 
 4. Subscription is supported on `reF1nd` core, please refer to [the document](https://github.com/reF1nd/sing-box/blob/reF1nd-dev/docs/configuration/provider/index.md)
 
