@@ -53,6 +53,16 @@ Please refer to the given [template](template.json) (1.12)
    OpenBSD上可能出现环路，绕过方法在模板里
 
 
+
+## TO-DO 待做事项
+
+1. Utilize `sendmmsg/recvmmsg` to improve tun performance
+
+   使用 `sendmmsg/recvmmsg` 提升 tun 性能
+
+2. Automatic redirect
+
+
 ## Notes 注意事项
 
 
