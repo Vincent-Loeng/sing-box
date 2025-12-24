@@ -1,9 +1,9 @@
 diff --git a/common/process/searcher_freebsd.go b/common/process/searcher_freebsd.go
 new file mode 100644
-index 00000000..4051c98c
+index 00000000..a45571e8
 --- /dev/null
 +++ b/common/process/searcher_freebsd.go
-@@ -0,0 +1,251 @@
+@@ -0,0 +1,256 @@
 +package process
 +
 +import (
@@ -199,6 +199,19 @@ index 00000000..4051c98c
 +
 +func newSearcher(major int, machine string) *searcher {
 +	var s *searcher
++	var vflag int
++	switch machine {
++	case "i386":
++		vflag = 388
++	case "amd64":
++		fallthrough
++	case "arm64":
++		fallthrough
++	case "riscv":
++		vflag = 392
++	default:
++		return nil
++	}
 +	switch major {
 +	case 12:
 +		fallthrough
@@ -207,14 +220,6 @@ index 00000000..4051c98c
 +	case 14:
 +		fallthrough
 +	case 15:
-+		var vflag int
-+		if machine == "i386" {
-+			vflag = 388
-+		} else if machine == "amd64" || machine == "arm64" {
-+			vflag = 392
-+		} else {
-+			return nil
-+		}
 +		s = &searcher{
 +			headSize:     64,
 +			tcpItemSize:  744,
@@ -460,6 +465,19 @@ index 89affb23..7ca2e237 100644
  	AutoRedirect           bool                             `json:"auto_redirect,omitempty"`
  	AutoRedirectInputMark  FwMark                           `json:"auto_redirect_input_mark,omitempty"`
  	AutoRedirectOutputMark FwMark                           `json:"auto_redirect_output_mark,omitempty"`
+diff --git a/protocol/tailscale/endpoint.go b/protocol/tailscale/endpoint.go
+index 695811f2..e586a472 100644
+--- a/protocol/tailscale/endpoint.go
++++ b/protocol/tailscale/endpoint.go
+@@ -29,7 +29,7 @@ import (
+ 	"github.com/sagernet/sing-box/experimental/libbox/platform"
+ 	"github.com/sagernet/sing-box/log"
+ 	"github.com/sagernet/sing-box/option"
+-	"github.com/sagernet/sing-tun"
++	tun "github.com/sagernet/sing-tun"
+ 	"github.com/sagernet/sing/common"
+ 	"github.com/sagernet/sing/common/bufio"
+ 	"github.com/sagernet/sing/common/control"
 diff --git a/protocol/tun/inbound.go b/protocol/tun/inbound.go
 index fc69309c..d7ee799a 100644
 --- a/protocol/tun/inbound.go
