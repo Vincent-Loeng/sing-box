@@ -10,6 +10,7 @@
 ---
 
 # sing-box for FreeBSD/OpenBSD (with tun support)
+![build workflow](https://github.com/Vincent-Loeng/sing-box/actions/workflows/run.yml/badge.svg) ![build reF1nd workflow](https://github.com/Vincent-Loeng/sing-box/actions/workflows/run-reF1nd.yml/badge.svg)
 
 This self-use repo automatically builds the latest version of sing-box with patches
 
