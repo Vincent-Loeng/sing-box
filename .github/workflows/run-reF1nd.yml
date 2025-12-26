@@ -37,7 +37,7 @@ jobs:
         #if: ${{ env.BUILD == 'true' }}
         run: |
           git clone --depth 1 -b main https://github.com/Sagernet/sing-tun.git sing-tun
-          git clone --depth 1 -b reF1nd-dev https://github.com/reF1nd/sing-box.git sing-box
+          git clone --depth 1 -b reF1nd-main https://github.com/reF1nd/sing-box.git sing-box
           ls -lha
           cd sing-tun
           patch -p1 < ../sing-tun.patch
