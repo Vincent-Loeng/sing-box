@@ -23,8 +23,6 @@ jobs:
 
       - name: Set variables
         run: |
-          echo "RELEASE_NAME=reF1nd-vincent-$(date +%Y%m%d)" >> $GITHUB_ENV
-          echo "TAG_NAME=reF1nd-vincent-$(date +%Y%m%d)" >> $GITHUB_ENV
           echo "tags=with_gvisor,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_quic" >> $GITHUB_ENV
         shell: bash
 
@@ -46,8 +44,11 @@ jobs:
           patch -p1 < ../sing-box-reF1nd.patch
           sing_tun_version=$(cat go.mod | grep github.com/sagernet/sing-tun | awk '{ print $2 }')
           echo -e "\nreplace github.com/sagernet/sing-tun ${sing_tun_version} => ../sing-tun" >> go.mod
+          latest_version=$(cat docs/changelog.md | grep '####' | head -n 1 | sed 's|#||g;s| ||g')
+          echo "RELEASE_NAME=${latest_version}-vincent" >> $GITHUB_ENV
+          echo "TAG_NAME=v${latest_version}-vincent" >> $GITHUB_ENV
           git_head=$(git rev-parse --short HEAD)
-          echo "version=reF1nd-${git_head}-vincent" >> $GITHUB_ENV
+          echo "version=vincent-${git_head}" >> $GITHUB_ENV
 
       - name: Check for new version
         run: |
@@ -78,7 +79,7 @@ jobs:
           arch_array=(riscv64 amd64 386 arm arm64)
           for os in ${os_array[@]}; do
             for arch in ${arch_array[@]}; do
-              GOOS=${os} GOARCH=${arch} CGO_ENABLED=0 go build -v -trimpath -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ env.version }}' -s -w -buildid=" -tags ${tags} ./cmd/sing-box
+              GOOS=${os} GOARCH=${arch} CGO_ENABLED=0 go build -v -trimpath -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${RELEASE_NAME}' -s -w -buildid=" -tags ${tags} ./cmd/sing-box
               mv sing-box sing-box-reF1nd-${os}-${arch}
             done
           done
