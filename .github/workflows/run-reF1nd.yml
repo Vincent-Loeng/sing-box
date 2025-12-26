@@ -110,7 +110,7 @@ jobs:
           git config --local user.email "173226116+Vincent-Loeng@users.noreply.github.com"
           git pull
           git add last_reF1nd_version
-          git commit -m "Release ${{ env.RELEASE_NAME }}"
+          git commit -m "Release ${{ env.RELEASE_NAME }} (reF1nd)"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
