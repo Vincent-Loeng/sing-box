@@ -1,0 +1,490 @@
+diff --git a/common/process/searcher_freebsd.go b/common/process/searcher_freebsd.go
+new file mode 100644
+index 00000000..a45571e8
+--- /dev/null
++++ b/common/process/searcher_freebsd.go
+@@ -0,0 +1,256 @@
++package process
++
++import (
++	"context"
++	"encoding/binary"
++	"fmt"
++	"net/netip"
++	"strconv"
++	"strings"
++	"sync"
++	"syscall"
++	"unsafe"
++
++	E "github.com/sagernet/sing/common/exceptions"
++)
++
++var _ Searcher = (*freebsdSearcher)(nil)
++
++type freebsdSearcher struct{}
++
++func NewSearcher(_ Config) (Searcher, error) {
++	return &freebsdSearcher{}, nil
++}
++
++func (d *freebsdSearcher) FindProcessInfo(ctx context.Context, network string, source netip.AddrPort, destination netip.AddrPort) (*Info, error) {
++	processName, err := findProcessName(network, source.Addr(), int(source.Port()))
++	if err != nil {
++		return nil, err
++	}
++	return &Info{ProcessPath: processName, UserId: -1}, nil
++}
++
++// store process name for when dealing with multiple PROCESS-NAME rules
++var (
++	defaultSearcher *searcher
++	once            sync.Once
++)
++
++func findProcessName(network string, ip netip.Addr, srcPort int) (string, error) {
++	once.Do(func() {
++		if err := initSearcher(); err != nil {
++			return
++		}
++	})
++
++	if defaultSearcher == nil {
++		return "", E.New("not support on this platform")
++	}
++
++	var spath string
++	isTCP := network == "tcp"
++	switch network {
++	case "tcp":
++		spath = "net.inet.tcp.pcblist"
++	case "udp":
++		spath = "net.inet.udp.pcblist"
++	default:
++		return "", E.New("invalid network")
++	}
++
++	value, err := syscall.Sysctl(spath)
++	if err != nil {
++		return "", err
++	}
++
++	buf := []byte(value)
++	pid, err := defaultSearcher.Search(buf, ip, uint16(srcPort), isTCP)
++	if err != nil {
++		return "", err
++	}
++
++	pp, err := getExecPathFromPID(pid)
++	return pp, err
++}
++
++func getExecPathFromPID(pid uint32) (string, error) {
++	buf := make([]byte, 2048)
++	size := uint64(len(buf))
++	// CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, pid
++	mib := [4]uint32{1, 14, 12, pid}
++
++	_, _, errno := syscall.Syscall6(
++		syscall.SYS___SYSCTL,
++		uintptr(unsafe.Pointer(&mib[0])),
++		uintptr(len(mib)),
++		uintptr(unsafe.Pointer(&buf[0])),
++		uintptr(unsafe.Pointer(&size)),
++		0,
++		0)
++	if errno != 0 || size == 0 {
++		return "", errno
++	}
++
++	return string(buf[:size-1]), nil
++}
++
++func readNativeUint32(b []byte) uint32 {
++	return *(*uint32)(unsafe.Pointer(&b[0]))
++}
++
++type searcher struct {
++	// sizeof(struct xinpgen)
++	headSize int
++	// sizeof(struct xtcpcb)
++	tcpItemSize int
++	// sizeof(struct xinpcb)
++	udpItemSize  int
++	udpInpOffset int
++	port         int
++	ip           int
++	vflag        int
++	socket       int
++
++	// sizeof(struct xfile)
++	fileItemSize int
++	data         int
++	pid          int
++}
++
++func (s *searcher) Search(buf []byte, ip netip.Addr, port uint16, isTCP bool) (uint32, error) {
++	var itemSize int
++	var inpOffset int
++
++	if isTCP {
++		// struct xtcpcb
++		itemSize = s.tcpItemSize
++		inpOffset = 8
++	} else {
++		// struct xinpcb
++		itemSize = s.udpItemSize
++		inpOffset = s.udpInpOffset
++	}
++
++	isIPv4 := ip.Is4()
++	// skip the first xinpgen block
++	for i := s.headSize; i+itemSize <= len(buf); i += itemSize {
++		inp := i + inpOffset
++
++		srcPort := binary.BigEndian.Uint16(buf[inp+s.port : inp+s.port+2])
++
++		if port != srcPort {
++			continue
++		}
++
++		// xinpcb.inp_vflag
++		flag := buf[inp+s.vflag]
++
++		var srcIP netip.Addr
++		switch {
++		case flag&0x1 > 0 && isIPv4:
++			// ipv4
++			srcIP, _ = netip.AddrFromSlice(buf[inp+s.ip : inp+s.ip+4])
++		case flag&0x2 > 0 && !isIPv4:
++			// ipv6
++			srcIP, _ = netip.AddrFromSlice(buf[inp+s.ip-12 : inp+s.ip+4])
++		default:
++			continue
++		}
++		srcIP = srcIP.Unmap()
++
++		if ip != srcIP {
++			continue
++		}
++
++		// xsocket.xso_so, interpreted as big endian anyway since it's only used for comparison
++		socket := binary.BigEndian.Uint64(buf[inp+s.socket : inp+s.socket+8])
++		return s.searchSocketPid(socket)
++	}
++	return 0, ErrNotFound
++}
++
++func (s *searcher) searchSocketPid(socket uint64) (uint32, error) {
++	value, err := syscall.Sysctl("kern.file")
++	if err != nil {
++		return 0, err
++	}
++
++	buf := []byte(value)
++
++	// struct xfile
++	itemSize := s.fileItemSize
++	for i := 0; i+itemSize <= len(buf); i += itemSize {
++		// xfile.xf_data
++		data := binary.BigEndian.Uint64(buf[i+s.data : i+s.data+8])
++		if data == socket {
++			// xfile.xf_pid
++			pid := readNativeUint32(buf[i+s.pid : i+s.pid+4])
++			return pid, nil
++		}
++	}
++	return 0, ErrNotFound
++}
++
++func newSearcher(major int, machine string) *searcher {
++	var s *searcher
++	var vflag int
++	switch machine {
++	case "i386":
++		vflag = 388
++	case "amd64":
++		fallthrough
++	case "arm64":
++		fallthrough
++	case "riscv":
++		vflag = 392
++	default:
++		return nil
++	}
++	switch major {
++	case 12:
++		fallthrough
++	case 13:
++		fallthrough
++	case 14:
++		fallthrough
++	case 15:
++		s = &searcher{
++			headSize:     64,
++			tcpItemSize:  744,
++			udpItemSize:  400,
++			port:         254,
++			ip:           284,
++			vflag:        vflag,
++			socket:       16,
++			fileItemSize: 128,
++			data:         56,
++			pid:          8,
++		}
++	}
++	return s
++}
++
++func initSearcher() error {
++	osRelease, err := syscall.Sysctl("kern.osrelease")
++	if err != nil {
++		return err
++	}
++	machine, err := syscall.Sysctl("hw.machine")
++	if err != nil {
++		return err
++	}
++
++	dot := strings.Index(osRelease, ".")
++	if dot != -1 {
++		osRelease = osRelease[:dot]
++	}
++	major, err := strconv.Atoi(osRelease)
++	if err != nil {
++		return err
++	}
++	defaultSearcher = newSearcher(major, machine)
++	if defaultSearcher == nil {
++		return fmt.Errorf("unsupported freebsd version %d (%s)", major, machine)
++	}
++	return nil
++}
+diff --git a/common/process/searcher_stub.go b/common/process/searcher_stub.go
+index 4665d91f..1464efb1 100644
+--- a/common/process/searcher_stub.go
++++ b/common/process/searcher_stub.go
+@@ -1,4 +1,4 @@
+-//go:build !linux && !windows && !darwin
++//go:build !linux && !windows && !darwin && !freebsd
+ 
+ package process
+ 
+diff --git a/common/redir/redir_freebsd.go b/common/redir/redir_freebsd.go
+new file mode 100644
+index 00000000..daa30d74
+--- /dev/null
++++ b/common/redir/redir_freebsd.go
+@@ -0,0 +1,95 @@
++package redir
++
++import (
++	"encoding/binary"
++	"errors"
++	"net"
++	"net/netip"
++	"os"
++	"syscall"
++	"unsafe"
++
++	M "github.com/sagernet/sing/common/metadata"
++)
++
++const (
++	PF_IN       = 0x1
++	PF_OUT      = 0x2
++	DIOCNATLOOK = 0xc04c4417
++)
++
++func Ntohs(i uint16) uint16 {
++	return binary.BigEndian.Uint16((*(*[2]byte)(unsafe.Pointer(&i)))[:])
++}
++
++func Htons(i uint16) uint16 {
++	b := make([]byte, 2)
++	binary.BigEndian.PutUint16(b, i)
++	return *(*uint16)(unsafe.Pointer(&b[0]))
++}
++
++func GetOriginalDestination(conn net.Conn) (destination netip.AddrPort, err error) {
++	_, err = os.Stat("/dev/pf")
++	if errors.Is(err, os.ErrNotExist) {
++		// ipfw
++		la := conn.LocalAddr().(*net.TCPAddr)
++		var ip net.IP
++		if la.IP.To4() != nil {
++			ip = make(net.IP, net.IPv4len)
++			copy(ip, la.IP[net.IPv6len-net.IPv4len:])
++		} else {
++			ip = make(net.IP, net.IPv6len)
++			copy(ip, la.IP[:])
++		}
++		destination = netip.AddrPortFrom(M.AddrFromIP(ip), uint16(la.Port))
++		return destination, nil
++	}
++
++	// pf
++	fd, err := syscall.Open("/dev/pf", 0, syscall.O_RDWR)
++	if err != nil {
++		return netip.AddrPort{}, err
++	}
++	defer syscall.Close(fd)
++	nl := struct {
++		saddr, daddr, rsaddr, rdaddr [16]byte
++		sport, dport, rsport, rdport [2]byte
++		af, proto, direction         uint8
++	}{
++		af:        syscall.AF_INET,
++		proto:     syscall.IPPROTO_TCP,
++		direction: PF_OUT,
++	}
++	la := conn.LocalAddr().(*net.TCPAddr)
++	ra := conn.RemoteAddr().(*net.TCPAddr)
++	raIP, laIP := ra.IP, la.IP
++	raPort, laPort := ra.Port, la.Port
++	switch {
++	case raIP.To4() != nil:
++		copy(nl.saddr[:net.IPv4len], raIP.To4())
++		copy(nl.daddr[:net.IPv4len], laIP.To4())
++		nl.af = syscall.AF_INET
++	default:
++		copy(nl.saddr[:], raIP.To16())
++		copy(nl.daddr[:], laIP.To16())
++		nl.af = syscall.AF_INET6
++	}
++	binary.BigEndian.PutUint16(nl.sport[:], uint16(raPort))
++	binary.BigEndian.PutUint16(nl.dport[:], uint16(laPort))
++	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), DIOCNATLOOK, uintptr(unsafe.Pointer(&nl))); errno != 0 {
++		return netip.AddrPort{}, errno
++	}
++
++	var ip net.IP
++	switch nl.af {
++	case syscall.AF_INET:
++		ip = make(net.IP, net.IPv4len)
++		copy(ip, nl.rdaddr[:net.IPv4len])
++	case syscall.AF_INET6:
++		ip = make(net.IP, net.IPv6len)
++		copy(ip, nl.rdaddr[:])
++	}
++	port := binary.BigEndian.Uint16(nl.rdport[:])
++	destination = netip.AddrPortFrom(M.AddrFromIP(ip), port)
++	return
++}
+diff --git a/common/redir/redir_openbsd.go b/common/redir/redir_openbsd.go
+new file mode 100644
+index 00000000..fbad2284
+--- /dev/null
++++ b/common/redir/redir_openbsd.go
+@@ -0,0 +1,66 @@
++package redir
++
++import (
++	"encoding/binary"
++	"net"
++	"net/netip"
++	"syscall"
++	"unsafe"
++
++	M "github.com/sagernet/sing/common/metadata"
++)
++
++const (
++	PF_IN       = 0x1
++	PF_OUT      = 0x2
++	DIOCNATLOOK = 0xc0504417
++)
++
++func GetOriginalDestination(conn net.Conn) (destination netip.AddrPort, err error) {
++	fd, err := syscall.Open("/dev/pf", 0, syscall.O_RDWR)
++	if err != nil {
++		return netip.AddrPort{}, err
++	}
++	defer syscall.Close(fd)
++	nl := struct {
++		saddr, daddr, rsaddr, rdaddr                    [16]byte
++		rdomain, rrdomain, sport, dport, rsport, rdport [2]byte
++		af, proto, direction                            uint8
++	}{
++		af:        syscall.AF_INET,
++		proto:     syscall.IPPROTO_TCP,
++		direction: PF_OUT,
++	}
++	la := conn.LocalAddr().(*net.TCPAddr)
++	ra := conn.RemoteAddr().(*net.TCPAddr)
++	raIP, laIP := ra.IP, la.IP
++	raPort, laPort := ra.Port, la.Port
++	switch {
++	case raIP.To4() != nil:
++		copy(nl.saddr[:net.IPv4len], raIP.To4())
++		copy(nl.daddr[:net.IPv4len], laIP.To4())
++		nl.af = syscall.AF_INET
++	default:
++		copy(nl.saddr[:], raIP.To16())
++		copy(nl.daddr[:], laIP.To16())
++		nl.af = syscall.AF_INET6
++	}
++	binary.BigEndian.PutUint16(nl.sport[:], uint16(raPort))
++	binary.BigEndian.PutUint16(nl.dport[:], uint16(laPort))
++	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), DIOCNATLOOK, uintptr(unsafe.Pointer(&nl))); errno != 0 {
++		return netip.AddrPort{}, errno
++	}
++
++	var ip net.IP
++	switch nl.af {
++	case syscall.AF_INET:
++		ip = make(net.IP, net.IPv4len)
++		copy(ip, nl.rdaddr[:net.IPv4len])
++	case syscall.AF_INET6:
++		ip = make(net.IP, net.IPv6len)
++		copy(ip, nl.rdaddr[:])
++	}
++	port := binary.BigEndian.Uint16(nl.rdport[:])
++	destination = netip.AddrPortFrom(M.AddrFromIP(ip), port)
++	return
++}
+diff --git a/common/redir/redir_other.go b/common/redir/redir_other.go
+index 3d60afeb..3ee166dd 100644
+--- a/common/redir/redir_other.go
++++ b/common/redir/redir_other.go
+@@ -1,4 +1,4 @@
+-//go:build !linux && !darwin
++//go:build !linux && !darwin && !freebsd && !openbsd
+ 
+ package redir
+ 
+diff --git a/option/tun.go b/option/tun.go
+index 9cb0be40..42bb107c 100644
+--- a/option/tun.go
++++ b/option/tun.go
+@@ -17,6 +17,7 @@ type TunInboundOptions struct {
+ 	AutoRoute                   bool                             `json:"auto_route,omitempty"`
+ 	IPRoute2TableIndex          int                              `json:"iproute2_table_index,omitempty"`
+ 	IPRoute2RuleIndex           int                              `json:"iproute2_rule_index,omitempty"`
++	FIBIndex                    int                              `json:"fib_index,omitempty"`
+ 	AutoRedirect                bool                             `json:"auto_redirect,omitempty"`
+ 	AutoRedirectDisableMarkMode bool                             `json:"auto_redirect_disable_mark_mode,omitempty"`
+ 	AutoRedirectInputMark       FwMark                           `json:"auto_redirect_input_mark,omitempty"`
+diff --git a/protocol/tun/inbound.go b/protocol/tun/inbound.go
+index 56c18dc0..cc159360 100644
+--- a/protocol/tun/inbound.go
++++ b/protocol/tun/inbound.go
+@@ -174,6 +174,10 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
+ 	if ruleIndex == 0 {
+ 		ruleIndex = tun.DefaultIPRoute2RuleIndex
+ 	}
++	fibIndex := options.FIBIndex
++	if fibIndex == 0 {
++		fibIndex = tun.DefaultFIBIndex
++	}
+ 	inputMark := uint32(options.AutoRedirectInputMark)
+ 	if inputMark == 0 {
+ 		inputMark = tun.DefaultAutoRedirectInputMark
+@@ -200,6 +204,7 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
+ 			AutoRoute:                options.AutoRoute,
+ 			IPRoute2TableIndex:       tableIndex,
+ 			IPRoute2RuleIndex:        ruleIndex,
++			FIBIndex:                 fibIndex,
+ 			AutoRedirectInputMark:    inputMark,
+ 			AutoRedirectOutputMark:   outputMark,
+ 			Inet4LoopbackAddress:     common.Filter(options.LoopbackAddress, netip.Addr.Is4),
