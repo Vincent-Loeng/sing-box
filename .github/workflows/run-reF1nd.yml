@@ -43,7 +43,7 @@ jobs:
           patch -p1 < ../sing-tun.patch
           cp monitor_darwin.go monitor_freebsd.go
           cd ../sing-box
-          patch -p1 < ../sing-box.patch
+          patch -p1 < ../sing-box-reF1nd.patch
           sing_tun_version=$(cat go.mod | grep github.com/sagernet/sing-tun | awk '{ print $2 }')
           echo -e "\nreplace github.com/sagernet/sing-tun ${sing_tun_version} => ../sing-tun" >> go.mod
           git_head=$(git rev-parse --short HEAD)
@@ -75,7 +75,7 @@ jobs:
         run: |
           cd sing-box
           os_array=(freebsd openbsd)
-          arch_array=(amd64 386 arm arm64)
+          arch_array=(riscv64 amd64 386 arm arm64)
           for os in ${os_array[@]}; do
             for arch in ${arch_array[@]}; do
               GOOS=${os} GOARCH=${arch} CGO_ENABLED=0 go build -v -trimpath -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ env.version }}' -s -w -buildid=" -tags ${tags} ./cmd/sing-box
