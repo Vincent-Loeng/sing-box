@@ -48,7 +48,7 @@ jobs:
           echo "RELEASE_NAME=${latest_version}-vincent" >> $GITHUB_ENV
           echo "TAG_NAME=v${latest_version}-vincent" >> $GITHUB_ENV
           git_head=$(git rev-parse --short HEAD)
-          echo "version=vincent-${git_head}" >> $GITHUB_ENV
+          echo "version=${git_head}" >> $GITHUB_ENV
 
       - name: Check for new version
         run: |
