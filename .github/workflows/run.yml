@@ -80,6 +80,7 @@ jobs:
             for arch in ${arch_array[@]}; do
               GOOS=${os} GOARCH=${arch} CGO_ENABLED=0 go build -v -trimpath -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${RELEASE_NAME}' -s -w -buildid=" -tags ${tags} ./cmd/sing-box
               mv sing-box sing-box-${os}-${arch}
+              xz -v sing-box-${os}-${arch}
             done
           done
 
