@@ -103,7 +103,7 @@ jobs:
           key: go-${{ hashFiles('**/go.sum') }}
 
       - name: Cache go build
-        if: github.event_name != 'schedule' || env.new == 'true'
+        if: github.event_name != 'schedule'
         uses: actions/cache@v4
         with:
           path: |
