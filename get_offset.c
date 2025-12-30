@@ -1,6 +1,7 @@
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include "sys/sockio.h"
 #include <sys/socketvar.h>
 #include <sys/sysctl.h>
 #include <netinet/in.h>
@@ -60,6 +61,10 @@ int main()
    printf("in6_aliasreq: %ld\n", sizeof(ifreq6));
    printf("sockaddr_in6: %ld\n", sizeof(ifra_addr));
 
+   printf("SIOCSIFADDR: %x\n", SIOCSIFADDR);
+   printf("SIOCSIFADDR_IN6: %x\n", SIOCSIFADDR_IN6);
+   printf("SIOCAIFADDR: %x\n", SIOCAIFADDR);
+   printf("SIOCAIFADDR_IN6: %x\n", SIOCAIFADDR_IN6);
+
    return 0;
 }
-
