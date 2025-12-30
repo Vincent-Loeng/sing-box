@@ -94,6 +94,22 @@ jobs:
         with:
           go-version: "stable"
 
+      - name: Cache go dependencies
+        if: github.event_name != 'schedule' || env.new == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+          key: go-${{ hashFiles('**/go.sum') }}
+
+      - name: Cache go build
+        if: github.event_name != 'schedule' || env.new == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+          key: go-${{ hashFiles('**/go.sum') }}-${{ matrix.os }}-${{ matrix.arch }}
+
       - name: Build binary file
         if: github.event_name != 'schedule' || env.new == 'true'
         run: |
