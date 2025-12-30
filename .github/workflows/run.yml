@@ -27,14 +27,17 @@ jobs:
       matrix:
         include:
           - { os: freebsd, arch: riscv64 }
-          - { os: freebsd, arch: amd64}
+          - { os: freebsd, arch: amd64 }
           - { os: freebsd, arch: 386 }
-          - { os: freebsd, arch: arm64}
+          - { os: freebsd, arch: arm64 }
+          - { os: openbsd, arch: riscv64 }
+          - { os: openbsd, arch: amd64 }
+          - { os: openbsd, arch: 386 }
+          - { os: openbsd, arch: arm64 }
     outputs:
       new: ${{ steps.check.outputs.new }}
       version: ${{ steps.check.outputs.version }}
     steps:
-
       - name: Set variables
         run: |
           latest_version=$(curl -sSL https://api.github.com/repos/Sagernet/sing-box/releases/latest | jq -r '.tag_name' | sed 's|v||g')
@@ -51,15 +54,19 @@ jobs:
       - name: Apply patches
         run: |
           git clone --depth 1 -b main https://github.com/Sagernet/sing-tun.git sing-tun
+          git clone --depth 1 https://github.com/metacubex/tfo-go.git tfo-go
           git clone --depth 1 -b main https://github.com/Sagernet/sing-box.git sing-box
           ls -lha
           cd sing-tun
           patch -p1 < ../sing-tun.patch
           cp monitor_darwin.go monitor_freebsd.go
+          cp monitor_darwin.go monitor_openbsd.go
           cd ../sing-box
           patch -p1 < ../sing-box.patch
           sing_tun_version=$(cat go.mod | grep github.com/sagernet/sing-tun | awk '{ print $2 }')
           echo -e "\nreplace github.com/sagernet/sing-tun ${sing_tun_version} => ../sing-tun" >> go.mod
+          tfo_go_version=$(cat go.mod | grep github.com/metacubex/tfo-go | awk '{ print $2 }')
+          echo -e "\nreplace github.com/metacubex/tfo-go ${tfo_go_version} => ../tfo-go" >> go.mod
 
       - name: Check for new version
         id: check
@@ -85,7 +92,7 @@ jobs:
         if: github.event_name != 'schedule' || env.new == 'true'
         uses: actions/setup-go@v6
         with:
-          go-version: 'stable'
+          go-version: "stable"
 
       - name: Build binary file
         if: github.event_name != 'schedule' || env.new == 'true'
@@ -142,4 +149,3 @@ jobs:
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
