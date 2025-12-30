@@ -26,15 +26,15 @@ This self-use repo automatically builds the latest version of sing-box with patc
 
    在 FreeBSD/OpenBSD 平台上支持 Tun 网卡
 
-2. Matching process is supported on FreeBSD since 1.12.0-beta.15-vincent-2
+2. Matching process is supported on FreeBSD
 
-   自 1.12.0-beta.15-vincent-2 起，在 FreeBSD 平台上支持进程匹配
+   在 FreeBSD 平台上支持进程匹配
 
-3. Redirect is supported on FreeBSD/OpenBSD since 1.12.0-beta.20-vincent-auto
+3. Redirect is supported on FreeBSD/OpenBSD
 
-   自 1.12.0-beta.20-vincent-auto 起，在 FreeBSD/OpenBSD 平台上支持 redirect
+   在 FreeBSD/OpenBSD 平台上支持 redirect
 
-4. Subscription is supported on `reF1nd` core, please refer to [the document](https://github.com/reF1nd/sing-box/blob/reF1nd-main/docs/configuration/provider/index.md)
+4. Subscription is supported in `reF1nd` core, please refer to [the document](https://github.com/reF1nd/sing-box/blob/reF1nd-main/docs/configuration/provider/index.md)
 
    `reF1nd`核心支持订阅，请参考[文档](https://github.com/reF1nd/sing-box/blob/reF1nd-main/docs/configuration/provider/index.zh.md)，第三方核心的订阅功能较为相似，使用上区别小，选此核心仅为尽量满足订阅外的其他需求
 
