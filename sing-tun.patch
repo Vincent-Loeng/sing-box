@@ -28,14 +28,15 @@ index 3afe968..e7dc15b 100644
 +          run: |
 +            make test
 diff --git a/Makefile b/Makefile
-index f7a8532..c19acad 100644
+index f7a8532..9e3b103 100644
 --- a/Makefile
 +++ b/Makefile
-@@ -7,6 +7,7 @@ build:
+@@ -7,6 +7,8 @@ build:
  	GOOS=linux GOARCH=arm go build -v -tags with_gvisor .
  	GOOS=android GOARCH=arm64 go build -v -tags with_gvisor .
  	GOOS=windows GOARCH=amd64 go build -v -tags with_gvisor .
 +	GOOS=freebsd GOARCH=amd64 go build -v -tags with_gvisor .
++	GOOS=openbsd GOARCH=amd64 go build -v -tags with_gvisor .
  
  fmt:
  	@gofumpt -l -w .
@@ -1054,27 +1055,15 @@ index 0000000..ee595d8
 +func (e *FreeBSDEndpoint) SetOnCloseAction(f func()) {
 +}
 diff --git a/tun_nondarwin.go b/tun_nondarwin.go
-deleted file mode 100644
-index 0faa2c9..0000000
+index 0faa2c9..547ddfa 100644
 --- a/tun_nondarwin.go
-+++ /dev/null
-@@ -1,5 +0,0 @@
++++ b/tun_nondarwin.go
+@@ -1,4 +1,4 @@
 -//go:build !darwin
--
--package tun
--
--const PacketOffset = 0
-diff --git a/tun_nondarwin_nonfreebsd.go b/tun_nondarwin_nonfreebsd.go
-new file mode 100644
-index 0000000..547ddfa
---- /dev/null
-+++ b/tun_nondarwin_nonfreebsd.go
-@@ -0,0 +1,5 @@
 +//go:build !(darwin || freebsd || openbsd)
-+
-+package tun
-+
-+const PacketOffset = 0
+ 
+ package tun
+ 
 diff --git a/tun_openbsd.go b/tun_openbsd.go
 new file mode 100644
 index 0000000..7190cac
