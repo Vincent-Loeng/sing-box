@@ -79,9 +79,9 @@ Please refer to the given [template](template.json) (1.12)
 
    使用 `redirect`（性能更好）时，请添加端口转发规则
 
-4. The support for riscv64 is experimental
+4. The support for `riscv64` and `ppc64` is experimental
 
-   riscv64 支持目前仍处于实验阶段
+   对`riscv64`和`ppc64`支持仍处于实验阶段
 
 ---
 
