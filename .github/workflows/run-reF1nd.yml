@@ -124,7 +124,7 @@ jobs:
           CGO_ENABLED: 0
 
       - name: Compress and move file to publish directory
-        if: github.event_name != 'schedule' || env.new == 'true'
+        if: github.event_name == 'schedule' && env.new == 'true'
         run: |
           cd sing-box
           xz -v sing-box-reF1nd-${{ matrix.os }}-${{ matrix.arch }}
