@@ -126,8 +126,8 @@ jobs:
           fi
         env:
           GOOS: ${{ matrix.goos }}
-          GOARCH`: ${{ matrix.goarch }}
-          GOARM`: ${{ matrix.goarm }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
           CGO_ENABLED: 0
 
       - name: Compress and move file to publish directory
