@@ -26,15 +26,18 @@ jobs:
     strategy:
       matrix:
         include:
-          - { os: freebsd, arch: riscv64 }
-          - { os: freebsd, arch: amd64 }
-          - { os: freebsd, arch: 386 }
-          - { os: freebsd, arch: arm64 }
-          - { os: openbsd, arch: riscv64 }
-          - { os: openbsd, arch: amd64 }
-          - { os: openbsd, arch: 386 }
-          - { os: openbsd, arch: arm64 }
-          - { os: openbsd, arch: ppc64 }
+          - { goos: freebsd, goarch: riscv64 }
+          - { goos: freebsd, goarch: amd64 }
+          - { goos: freebsd, goarch: 386 }
+          - { goos: freebsd, goarch: arm, goarm: 6 }
+          - { goos: freebsd, goarch: arm, goarm: 7 }
+          - { goos: freebsd, goarch: arm64 }
+          - { goos: openbsd, goarch: riscv64 }
+          - { goos: openbsd, goarch: amd64 }
+          - { goos: openbsd, goarch: 386 }
+          - { goos: openbsd, goarch: arm, goarm: 7 }
+          - { goos: openbsd, goarch: arm64 }
+          - { goos: openbsd, goarch: ppc64 }
     outputs:
       new: ${{ steps.check.outputs.new }}
       version: ${{ steps.check.outputs.version }}
@@ -110,24 +113,33 @@ jobs:
         with:
           path: |
             ~/.cache/go-build
-          key: go-${{ hashFiles('**/go.sum') }}-${{ matrix.os }}-${{ matrix.arch }}
+          key: go-${{ hashFiles('**/go.sum') }}-${{ matrix.goos }}-${{ matrix.goarch }}
 
       - name: Build binary file
         if: github.event_name != 'schedule' || env.new == 'true'
         run: |
           cd sing-box
           go build -v -trimpath -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${RELEASE_NAME}' -s -w -buildid=" -tags ${tags} ./cmd/sing-box
-          mv sing-box sing-box-reF1nd-${{ matrix.os }}-${{ matrix.arch }}
+          if [ "${{ matrix.goarch }}" == 'arm' ]; then
+            mv sing-box sing-box-reF1nd-${{ matrix.goos }}-${{ matrix.goarch }}v${{ matrix.goarm }}
+          else
+            mv sing-box sing-box-reF1nd-${{ matrix.goos }}-${{ matrix.goarch }}
+          fi
         env:
-          GOOS: ${{ matrix.os }}
-          GOARCH: ${{ matrix.arch }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH`: ${{ matrix.goarch }}
+          GOARM`: ${{ matrix.goarm }}
           CGO_ENABLED: 0
 
       - name: Compress and move file to publish directory
-        if: github.event_name == 'schedule' && env.new == 'true'
+        if: github.event_name != 'schedule' || env.new == 'true'
         run: |
           cd sing-box
-          xz -v sing-box-reF1nd-${{ matrix.os }}-${{ matrix.arch }}
+          if [ "${{ matrix.goarch }}" == 'arm' ]; then
+            xz -v sing-box-reF1nd-${{ matrix.goos }}-${{ matrix.goarch }}v${{ matrix.goarm }}
+          else
+            xz -v sing-box-reF1nd-${{ matrix.goos }}-${{ matrix.goarch }}
+          fi
           mkdir -p ../publish
           cp -v sing-box-* ../publish/
 
