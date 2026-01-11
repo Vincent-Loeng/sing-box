@@ -143,7 +143,7 @@ jobs:
           cp -v sing-box-* ../publish/
 
       - name: Release and upload assets
-        if: github.event_name == 'schedule' && env.new == 'true'
+        if: env.new == 'true'
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ env.RELEASE_NAME }}
