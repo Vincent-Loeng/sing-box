@@ -29,8 +29,8 @@ jobs:
           - { goos: freebsd, goarch: riscv64 }
           - { goos: freebsd, goarch: amd64 }
           - { goos: freebsd, goarch: 386 }
-          - { goos: freebsd, goarch: arm, goarm: 6 }
-          - { goos: freebsd, goarch: arm, goarm: 7 }
+          #- { goos: freebsd, goarch: arm, goarm: 6 }
+          #- { goos: freebsd, goarch: arm, goarm: 7 }
           - { goos: freebsd, goarch: arm64 }
           - { goos: openbsd, goarch: riscv64 }
           - { goos: openbsd, goarch: amd64 }
