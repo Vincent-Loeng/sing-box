@@ -2,7 +2,7 @@ name: Build reF1nd
 on:
   workflow_dispatch:
   schedule:
-    - cron: "00 23 * * *"
+    - cron: "00 11 * * *"
   push:
     branches:
       - master
