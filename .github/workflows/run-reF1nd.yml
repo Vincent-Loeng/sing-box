@@ -35,7 +35,7 @@ jobs:
           - { goos: openbsd, goarch: riscv64 }
           - { goos: openbsd, goarch: amd64 }
           - { goos: openbsd, goarch: 386 }
-          - { goos: openbsd, goarch: arm, goarm: 7 }
+          #- { goos: openbsd, goarch: arm, goarm: 7 }
           - { goos: openbsd, goarch: arm64 }
           - { goos: openbsd, goarch: ppc64 }
     outputs:
@@ -94,13 +94,13 @@ jobs:
           echo "version=${version}" >> $GITHUB_OUTPUT
 
       - name: Setup Go
-        if: github.event_name != 'schedule' || env.new == 'true'
+        if: env.new == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: "stable"
 
       - name: Cache go dependencies
-        if: github.event_name != 'schedule' || env.new == 'true'
+        if: env.new == 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -116,7 +116,7 @@ jobs:
           key: go-${{ hashFiles('**/go.sum') }}-${{ matrix.goos }}-${{ matrix.goarch }}
 
       - name: Build binary file
-        if: github.event_name != 'schedule' || env.new == 'true'
+        if: env.new == 'true'
         run: |
           cd sing-box
           go build -v -trimpath -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${RELEASE_NAME}' -s -w -buildid=" -tags ${tags} ./cmd/sing-box
@@ -132,7 +132,7 @@ jobs:
           CGO_ENABLED: 0
 
       - name: Compress and move file to publish directory
-        if: github.event_name != 'schedule' || env.new == 'true'
+        if: env.new == 'true'
         run: |
           cd sing-box
           if [ "${{ matrix.goarch }}" == 'arm' ]; then
@@ -158,7 +158,7 @@ jobs:
 
   push:
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' && needs.build.outputs.new == 'true'
+    if: needs.build.outputs.new == 'true'
     needs:
       - build
     steps:
