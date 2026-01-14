@@ -20,7 +20,7 @@ This self-use repo automatically builds the latest version of sing-box with patc
 ## Other tools 其他工具
 
 1. [**mihomo for FreeBSD**](https://github.com/Vincent-Loeng/mihomo)
-2. [**NaïveProxy for FreeBSD**](https://github.com/Vincent-Loeng/naiveproxy)
+2. [**NaïveProxy for FreeBSD/OpenBSD**](https://github.com/Vincent-Loeng/naiveproxy)
 
 
 ## Enhancements 增强功能
