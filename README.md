@@ -1,15 +1,10 @@
 
-**This repo may not be maintained anymore. The tool is enough to speed up some websites, e.g., OpenAI**
+**This repo has been archived due to the too strict redistribution rule which I just noticed**
 
-精力有限，可能不再维护，目前足以加速某些网站，比如 OpenAI
-
-**Currently, only release versions are supported**
-
-目前，仅更新 release 版
+**Besides, the tool is enough to speed up some websites, e.g., OpenAI**
 
 ---
 
-# sing-box for FreeBSD/OpenBSD (with tun support)
 ![build workflow](https://github.com/Vincent-Loeng/sing-box/actions/workflows/run.yml/badge.svg) ![build reF1nd workflow](https://github.com/Vincent-Loeng/sing-box/actions/workflows/run-reF1nd.yml/badge.svg)
 
 This self-use repo automatically builds the latest version with patches
