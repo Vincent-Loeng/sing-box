@@ -83,17 +83,7 @@ Please refer to the given [template](template.json) (1.12)
 
 ---
 
-# sing-box
-
-The universal proxy platform.
-
-[![Packaging status](https://repology.org/badge/vertical-allrepos/sing-box.svg)](https://repology.org/project/sing-box/versions)
-
-## Documentation
-
-https://sing-box.sagernet.org
-
-## License
+## Original License
 
 ```
 Copyright (C) 2022 by nekohasekai <contact-sagernet@sekai.icu>
