@@ -12,15 +12,15 @@
 # sing-box for FreeBSD/OpenBSD (with tun support)
 ![build workflow](https://github.com/Vincent-Loeng/sing-box/actions/workflows/run.yml/badge.svg) ![build reF1nd workflow](https://github.com/Vincent-Loeng/sing-box/actions/workflows/run-reF1nd.yml/badge.svg)
 
-This self-use repo automatically builds the latest version of sing-box with patches
+This self-use repo automatically builds the latest version with patches
 
-此自用仓库自动应用补丁并构建 sing-box 最新的版本
+此自用仓库自动应用补丁并构建最新的版本
 
 
 ## Other tools 其他工具
 
-1. [**mihomo for FreeBSD**](https://github.com/Vincent-Loeng/mihomo)
-2. [**NaïveProxy for FreeBSD/OpenBSD**](https://github.com/Vincent-Loeng/naiveproxy)
+1. [**clash-meta for FreeBSD**](https://github.com/Vincent-Loeng/clash-meta)
+2. [**NaiveProxy for FreeBSD/OpenBSD**](https://github.com/Vincent-Loeng/naiveproxy)
 
 
 ## Enhancements 增强功能
