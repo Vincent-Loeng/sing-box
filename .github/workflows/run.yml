@@ -58,7 +58,6 @@ jobs:
       - name: Apply patches
         run: |
           git clone --depth 1 -b stable https://github.com/Sagernet/sing-tun.git sing-tun
-          git clone --depth 1 https://github.com/metacubex/tfo-go.git tfo-go
           git clone --depth 1 -b stable https://github.com/Sagernet/sing-box.git sing-box
           ls -lha
           cd sing-tun
@@ -68,9 +67,8 @@ jobs:
           cd ../sing-box
           patch -p1 < ../sing-box.patch
           sing_tun_version=$(cat go.mod | grep github.com/sagernet/sing-tun | awk '{ print $2 }')
+          echo -e "${sing_tun_version}"
           echo -e "\nreplace github.com/sagernet/sing-tun ${sing_tun_version} => ../sing-tun" >> go.mod
-          tfo_go_version=$(cat go.mod | grep github.com/metacubex/tfo-go | awk '{ print $2 }')
-          echo -e "\nreplace github.com/metacubex/tfo-go ${tfo_go_version} => ../tfo-go" >> go.mod
 
       - name: Check for new version
         id: check
