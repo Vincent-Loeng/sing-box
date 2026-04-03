@@ -459,7 +459,7 @@ index 3d60afeb..3ee166dd 100644
  package redir
  
 diff --git a/option/tun.go b/option/tun.go
-index 72b6e456..d1aaa47f 100644
+index 7deabc67..9e6c496f 100644
 --- a/option/tun.go
 +++ b/option/tun.go
 @@ -17,6 +17,7 @@ type TunInboundOptions struct {
@@ -468,32 +468,23 @@ index 72b6e456..d1aaa47f 100644
  	IPRoute2RuleIndex             int                              `json:"iproute2_rule_index,omitempty"`
 +	FIBIndex                      int                              `json:"fib_index,omitempty"`
  	AutoRedirect                  bool                             `json:"auto_redirect,omitempty"`
+ 	AutoRedirectDisableMarkMode   bool                             `json:"auto_redirect_disable_mark_mode,omitempty"`
  	AutoRedirectInputMark         FwMark                           `json:"auto_redirect_input_mark,omitempty"`
- 	AutoRedirectOutputMark        FwMark                           `json:"auto_redirect_output_mark,omitempty"`
 diff --git a/protocol/tun/inbound.go b/protocol/tun/inbound.go
-index 6820831a..96b74495 100644
+index d430f397..863ef5df 100644
 --- a/protocol/tun/inbound.go
 +++ b/protocol/tun/inbound.go
-@@ -17,7 +17,7 @@ import (
- 	"github.com/sagernet/sing-box/log"
- 	"github.com/sagernet/sing-box/option"
- 	"github.com/sagernet/sing-box/route/rule"
--	"github.com/sagernet/sing-tun"
-+	tun "github.com/sagernet/sing-tun"
- 	"github.com/sagernet/sing/common"
- 	E "github.com/sagernet/sing/common/exceptions"
- 	"github.com/sagernet/sing/common/json/badoption"
-@@ -144,6 +144,10 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
- 	if autoRedirectFallbackRuleIndex == 0 {
- 		autoRedirectFallbackRuleIndex = tun.DefaultIPRoute2AutoRedirectFallbackRuleIndex
+@@ -140,6 +140,10 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
+ 	if ruleIndex == 0 {
+ 		ruleIndex = tun.DefaultIPRoute2RuleIndex
  	}
 +	fibIndex := options.FIBIndex
 +	if fibIndex == 0 {
 +		fibIndex = tun.DefaultFIBIndex
 +	}
- 	inputMark := uint32(options.AutoRedirectInputMark)
- 	if inputMark == 0 {
- 		inputMark = tun.DefaultAutoRedirectInputMark
+ 	autoRedirectFallbackRuleIndex := options.AutoRedirectFallbackRuleIndex
+ 	if autoRedirectFallbackRuleIndex == 0 {
+ 		autoRedirectFallbackRuleIndex = tun.DefaultIPRoute2AutoRedirectFallbackRuleIndex
 @@ -178,6 +182,7 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
  			IPRoute2TableIndex:                    tableIndex,
  			IPRoute2RuleIndex:                     ruleIndex,
