@@ -118,9 +118,9 @@ jobs:
           cd sing-box
           go build -v -trimpath -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${RELEASE_NAME}' -s -w -buildid=" -tags ${tags} ./cmd/sing-box
           if [ "${{ matrix.goarch }}" == 'arm' ]; then
-            mv sing-box sing-box-${{ matrix.goos }}-${{ matrix.goarch }}v${{ matrix.goarm }}
+            mv sing-box bsd-box-${{ matrix.goos }}-${{ matrix.goarch }}v${{ matrix.goarm }}
           else
-            mv sing-box sing-box-${{ matrix.goos }}-${{ matrix.goarch }}
+            mv sing-box bsd-box-${{ matrix.goos }}-${{ matrix.goarch }}
           fi
         env:
           GOOS: ${{ matrix.goos }}
@@ -133,12 +133,12 @@ jobs:
         run: |
           cd sing-box
           if [ "${{ matrix.goarch }}" == 'arm' ]; then
-            xz -v sing-box-${{ matrix.goos }}-${{ matrix.goarch }}v${{ matrix.goarm }}
+            xz -v bsd-box-${{ matrix.goos }}-${{ matrix.goarch }}v${{ matrix.goarm }}
           else
-            xz -v sing-box-${{ matrix.goos }}-${{ matrix.goarch }}
+            xz -v bsd-box-${{ matrix.goos }}-${{ matrix.goarch }}
           fi
           mkdir -p ../publish
-          cp -v sing-box-* ../publish/
+          cp -v bsd-box-* ../publish/
 
       - name: Release and upload assets
         if: github.event_name == 'schedule' && env.new == 'true'
