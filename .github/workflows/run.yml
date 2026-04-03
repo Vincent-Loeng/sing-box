@@ -93,13 +93,13 @@ jobs:
         shell: bash
 
       - name: Setup Go
-        if: env.new == 'true'
+        if: github.event_name != 'schedule' || env.new == 'true'
         uses: actions/setup-go@v6
         with:
           go-version: "stable"
 
       - name: Cache go dependencies
-        if: env.new == 'true'
+        if: github.event_name != 'schedule' || env.new == 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -115,7 +115,7 @@ jobs:
           key: go-${{ hashFiles('**/go.sum') }}-${{ matrix.goos }}-${{ matrix.goarch }}
 
       - name: Build binary file
-        if: env.new == 'true'
+        if: github.event_name != 'schedule' || env.new == 'true'
         run: |
           cd sing-box
           go build -v -trimpath -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${RELEASE_NAME}' -s -w -buildid=" -tags ${tags} ./cmd/sing-box
@@ -131,7 +131,7 @@ jobs:
           CGO_ENABLED: 0
 
       - name: Compress and move file to publish directory
-        if: env.new == 'true'
+        if: github.event_name != 'schedule' || env.new == 'true'
         run: |
           cd sing-box
           if [ "${{ matrix.goarch }}" == 'arm' ]; then
@@ -143,7 +143,7 @@ jobs:
           cp -v sing-box-* ../publish/
 
       - name: Release and upload assets
-        if: env.new == 'true'
+        if: github.event_name == 'schedule' && env.new == 'true'
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ env.RELEASE_NAME }}
@@ -157,7 +157,7 @@ jobs:
 
   push:
     runs-on: ubuntu-latest
-    if: needs.build.outputs.new == 'true'
+    if: github.event_name == 'schedule' && needs.build.outputs.new == 'true'
     needs:
       - build
     steps:
