@@ -12,9 +12,9 @@
 
 ![build workflow](https://github.com/Vincent-Loeng/bsd-box/actions/workflows/run.yml/badge.svg) ![build reF1nd workflow](https://github.com/Vincent-Loeng/bsd-box/actions/workflows/run-reF1nd.yml/badge.svg)
 
-This ***self-use repo*** automatically builds the latest version with patches, the versioning is different with the original one
+This ***self-use repo*** automatically builds the latest version with patches
 
-此***自用仓库***自动应用补丁并构建最新的版本，版本命名与原版不同
+此***自用仓库***自动应用补丁并构建最新的版本
 
 
 ## Other tools 其他工具
