@@ -55,7 +55,8 @@ jobs:
       - name: Apply patches
         run: |
           git clone --depth 1 -b main https://github.com/Sagernet/sing-tun.git sing-tun
-          git clone --depth 1 -b reF1nd-stable https://github.com/reF1nd/sing-box.git sing-box
+          wget https://github.com/reF1nd/sing-box/archive/refs/tags/v${version}-reF1nd.tar.gz -O sing-box-${version}-reF1nd.tar.gz
+          tar -xf sing-box-${version}-reF1nd.tar.gz && mv sing-box-${version}-reF1nd sing-box
           ls -lha
           cd sing-tun
           patch -p1 < ../sing-tun.patch
