@@ -71,7 +71,7 @@ jobs:
           echo -e "\nreplace github.com/sagernet/sing-tun ${sing_tun_version} => ../sing-tun" >> go.mod
           latest_version=$(cat docs/changelog.md | grep '####' | head -n 1 | sed 's|#||g;s| ||g')
           echo ${latest_version}
-          if [ env.RELEASE_NAME != "${latest_version}-vincent" ]; then
+          if [ "{{ env.RELEASE_NAME }}" != "${latest_version}-vincent" ]; then
             exit 1
           fi
 
