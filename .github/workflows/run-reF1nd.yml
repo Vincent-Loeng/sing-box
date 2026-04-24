@@ -62,19 +62,21 @@ jobs:
 
       - name: Apply patches
         run: |
-          git clone --depth 1 -b main https://github.com/Sagernet/sing-tun.git sing-tun
           wget https://github.com/reF1nd/sing-box/archive/refs/tags/v${version}-reF1nd.tar.gz -O sing-box-${version}-reF1nd.tar.gz
           tar -xf sing-box-${version}-reF1nd.tar.gz && mv sing-box-${version}-reF1nd sing-box
           ls -lha
+          cd sing-box
+          patch -p1 < ../sing-box-reF1nd.patch
+          sing_tun_version=$(cat go.mod | grep github.com/sagernet/sing-tun | awk '{ print $2 }' | sed 's|v||g')
+          echo -e "\nreplace github.com/sagernet/sing-tun ${sing_tun_version} => ../sing-tun" >> go.mod
+          echo -e "${sing_tun_version}"
+          cd ..
+          wget https://github.com/Sagernet/sing-tun/archive/refs/tags/v${sing_tun_version}.tar.gz -O sing-tun-${sing_tun_version}.tar.gz
+          tar -xf sing-tun-${sing_tun_version}.tar.gz && mv sing-tun-${sing_tun_version} sing-tun
           cd sing-tun
           patch -p1 < ../sing-tun.patch
           cp monitor_darwin.go monitor_freebsd.go
           cp monitor_darwin.go monitor_openbsd.go
-          cd ../sing-box
-          patch -p1 < ../sing-box-reF1nd.patch
-          sing_tun_version=$(cat go.mod | grep github.com/sagernet/sing-tun | awk '{ print $2 }')
-          echo -e "\nreplace github.com/sagernet/sing-tun ${sing_tun_version} => ../sing-tun" >> go.mod
-          echo -e "${sing_tun_version}"
 
       - name: Check for new version
         id: check
