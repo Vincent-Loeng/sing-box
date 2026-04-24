@@ -77,26 +77,27 @@ jobs:
           echo "VERSION=${LATEST_VERSION}" >> $GITHUB_OUTPUT
         shell: bash
 
-      - name: Apply patches
+      - name: Download and extract source files
+        if: github.event_name != 'schedule' || env.NEW == 'true'
         run: |
           wget https://github.com/reF1nd/sing-box/archive/refs/tags/v${VERSION}-reF1nd.tar.gz -O sing-box-${VERSION}-reF1nd.tar.gz
           tar -xf sing-box-${VERSION}-reF1nd.tar.gz && mv sing-box-${VERSION}-reF1nd sing-box
+          wget https://github.com/Sagernet/sing-tun/archive/refs/tags/v${SING_TUN_VERSION}.tar.gz -O sing-tun-${SING_TUN_VERSION}.tar.gz
+          tar -xf sing-tun-${SING_TUN_VERSION}.tar.gz && mv sing-tun-${SING_TUN_VERSION} sing-tun
+          ls -lha
+
+      - name: Apply patches
+        if: github.event_name != 'schedule' || env.NEW == 'true'
+        run: |
           cd sing-box
           patch -p1 < ../sing-box-reF1nd.patch
           SING_TUN_VERSION=$(cat go.mod | grep github.com/sagernet/sing-tun | awk '{ print $2 }' | sed 's|v||g')
           echo -e "\nreplace github.com/sagernet/sing-tun v${SING_TUN_VERSION} => ../sing-tun" >> go.mod
           echo -e "sing-tun version: ${SING_TUN_VERSION}"
-
-          cd ..
-          wget https://github.com/Sagernet/sing-tun/archive/refs/tags/v${SING_TUN_VERSION}.tar.gz -O sing-tun-${SING_TUN_VERSION}.tar.gz
-          tar -xf sing-tun-${SING_TUN_VERSION}.tar.gz && mv sing-tun-${SING_TUN_VERSION} sing-tun
-          cd sing-tun
+          cd ../sing-tun
           patch -p1 < ../sing-tun.patch
           cp monitor_darwin.go monitor_freebsd.go
           cp monitor_darwin.go monitor_openbsd.go
-
-          cd ..
-          ls -lha
 
       - name: Setup Go
         if: github.event_name != 'schedule' || env.NEW == 'true'
