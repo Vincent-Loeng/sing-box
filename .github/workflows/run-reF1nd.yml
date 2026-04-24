@@ -42,6 +42,11 @@ jobs:
       new: ${{ steps.check.outputs.NEW }}
       version: ${{ steps.check.outputs.VERSION }}
     steps:
+      - name: Checkout the "hidden" branch
+        uses: actions/checkout@v4
+        with:
+          ref: hidden
+
       - name: Check for new version
         id: check
         run: |
@@ -54,6 +59,7 @@ jobs:
           echo "TAG_NAME=v${LATEST_VERSION}-vincent" >> $GITHUB_ENV
           echo "TAGS=with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_ccm,with_ocm,tfogo_checklinkname0" >> $GITHUB_ENV
           echo "VERSION=${LATEST_VERSION}" >> $GITHUB_ENV
+
           if [ -f last_reF1nd_version ]; then
             LAST_VERSION=$(cat last_reF1nd_version)
           else
@@ -71,21 +77,16 @@ jobs:
           echo "VERSION=${LATEST_VERSION}" >> $GITHUB_OUTPUT
         shell: bash
 
-      - name: Checkout the "hidden" branch
-        uses: actions/checkout@v4
-        with:
-          ref: hidden
-
       - name: Apply patches
         run: |
           wget https://github.com/reF1nd/sing-box/archive/refs/tags/v${VERSION}-reF1nd.tar.gz -O sing-box-${VERSION}-reF1nd.tar.gz
           tar -xf sing-box-${VERSION}-reF1nd.tar.gz && mv sing-box-${VERSION}-reF1nd sing-box
-          ls -lha
           cd sing-box
           patch -p1 < ../sing-box-reF1nd.patch
           SING_TUN_VERSION=$(cat go.mod | grep github.com/sagernet/sing-tun | awk '{ print $2 }' | sed 's|v||g')
           echo -e "\nreplace github.com/sagernet/sing-tun v${SING_TUN_VERSION} => ../sing-tun" >> go.mod
-          echo -e "${SING_TUN_VERSION}"
+          echo -e "sing-tun version: ${SING_TUN_VERSION}"
+
           cd ..
           wget https://github.com/Sagernet/sing-tun/archive/refs/tags/v${SING_TUN_VERSION}.tar.gz -O sing-tun-${SING_TUN_VERSION}.tar.gz
           tar -xf sing-tun-${SING_TUN_VERSION}.tar.gz && mv sing-tun-${SING_TUN_VERSION} sing-tun
@@ -93,6 +94,9 @@ jobs:
           patch -p1 < ../sing-tun.patch
           cp monitor_darwin.go monitor_freebsd.go
           cp monitor_darwin.go monitor_openbsd.go
+
+          cd ..
+          ls -lha
 
       - name: Setup Go
         if: github.event_name != 'schedule' || env.NEW == 'true'
