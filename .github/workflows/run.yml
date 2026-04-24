@@ -45,6 +45,10 @@ jobs:
       - name: Set variables
         run: |
           latest_version=$(curl -sSL https://api.github.com/repos/Sagernet/sing-box/releases/latest | jq -r '.tag_name' | sed 's|v||g')
+          if [ "${latest_version}" == "null" ]; then
+            echo "${latest_version}"
+            exit 1
+          fi
           echo "RELEASE_NAME=${latest_version}-vincent" >> $GITHUB_ENV
           echo "TAG_NAME=v${latest_version}-vincent" >> $GITHUB_ENV
           echo "tags=with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_ccm,with_ocm,tfogo_checklinkname0" >> $GITHUB_ENV
@@ -58,7 +62,8 @@ jobs:
       - name: Apply patches
         run: |
           git clone --depth 1 -b main https://github.com/Sagernet/sing-tun.git sing-tun
-          git clone --depth 1 -b stable https://github.com/Sagernet/sing-box.git sing-box
+          wget https://github.com/SagerNet/sing-box/archive/refs/tags/v${version}.tar.gz -O sing-box-${version}.tar.gz
+          tar -xf sing-box-${version}.tar.gz && mv sing-box-${version} sing-box
           ls -lha
           cd sing-tun
           patch -p1 < ../sing-tun.patch
@@ -69,11 +74,6 @@ jobs:
           sing_tun_version=$(cat go.mod | grep github.com/sagernet/sing-tun | awk '{ print $2 }')
           echo -e "${sing_tun_version}"
           echo -e "\nreplace github.com/sagernet/sing-tun ${sing_tun_version} => ../sing-tun" >> go.mod
-          latest_version=$(cat docs/changelog.md | grep '####' | head -n 1 | sed 's|#||g;s| ||g')
-          echo ${latest_version}
-          if [ "${{ env.RELEASE_NAME }}" != "${latest_version}-vincent" ]; then
-            exit 1
-          fi
 
       - name: Check for new version
         id: check
