@@ -39,8 +39,8 @@ jobs:
           - { goos: openbsd, goarch: arm64 }
           - { goos: openbsd, goarch: ppc64 }
     outputs:
-      new: ${{ steps.check.outputs.NEW }}
-      version: ${{ steps.check.outputs.VERSION }}
+      NEW: ${{ steps.check.outputs.NEW }}
+      VERSION: ${{ steps.check.outputs.VERSION }}
     steps:
       - name: Checkout the "hidden" branch
         uses: actions/checkout@v4
@@ -160,7 +160,7 @@ jobs:
           cp -v bsd-box-* ../publish/
 
       - name: Release and upload assets
-        if: github.event_name == 'schedule' && env.NEW == 'true'
+        if: github.event_name != 'schedule' || env.NEW == 'true'
         uses: softprops/action-gh-release@v2.4.2
         with:
           name: ${{ env.RELEASE_NAME }}
@@ -174,7 +174,7 @@ jobs:
 
   push:
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' && needs.build.outputs.new == 'true'
+    if: github.event_name != 'schedule' || needs.build.outputs.NEW == 'true'
     needs:
       - build
     steps:
@@ -185,14 +185,14 @@ jobs:
 
       - name: Update last_reF1nd_version
         run: |
-          echo "${{ needs.build.outputs.version }}" > last_reF1nd_version
+          echo "${{ needs.build.outputs.VERSION }}" > last_reF1nd_version
 
       - name: Push last_reF1nd_version to "hidden" branch
         run: |
           git config --local user.name "Vincent Loeng"
           git config --local user.email "173226116+Vincent-Loeng@users.noreply.github.com"
           git add last_reF1nd_version
-          git commit -m "Release ${{ needs.build.outputs.version }} (reF1nd)"
+          git commit -m "Release ${{ needs.build.outputs.VERSION }} (reF1nd)"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
