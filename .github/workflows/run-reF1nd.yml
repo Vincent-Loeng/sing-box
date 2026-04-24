@@ -68,7 +68,7 @@ jobs:
           cd sing-box
           patch -p1 < ../sing-box-reF1nd.patch
           sing_tun_version=$(cat go.mod | grep github.com/sagernet/sing-tun | awk '{ print $2 }' | sed 's|v||g')
-          echo -e "\nreplace github.com/sagernet/sing-tun ${sing_tun_version} => ../sing-tun" >> go.mod
+          echo -e "\nreplace github.com/sagernet/sing-tun v${sing_tun_version} => ../sing-tun" >> go.mod
           echo -e "${sing_tun_version}"
           cd ..
           wget https://github.com/Sagernet/sing-tun/archive/refs/tags/v${sing_tun_version}.tar.gz -O sing-tun-${sing_tun_version}.tar.gz
