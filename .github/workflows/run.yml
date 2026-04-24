@@ -61,7 +61,7 @@ jobs:
 
       - name: Apply patches
         run: |
-          wget https://github.com/Sagernet/sing-box/archive/refs/tags/v${version}-reF1nd.tar.gz -O sing-box-${version}.tar.gz
+          wget https://github.com/Sagernet/sing-box/archive/refs/tags/v${version}.tar.gz -O sing-box-${version}.tar.gz
           tar -xf sing-box-${version}.tar.gz && mv sing-box-${version} sing-box
           ls -lha
           cd sing-box
