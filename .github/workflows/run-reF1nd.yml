@@ -43,7 +43,7 @@ jobs:
       VERSION: ${{ steps.check.outputs.VERSION }}
     steps:
       - name: Checkout the "hidden" branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: hidden
 
@@ -101,9 +101,9 @@ jobs:
           cp monitor_darwin.go monitor_freebsd.go
           cp monitor_darwin.go monitor_openbsd.go
 
-      - name: Setup Go
+      - name: Setup go
         if: github.event_name != 'schedule' || env.NEW == 'true'
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: "stable"
 
