@@ -30,8 +30,6 @@
         // 可在此处添加需要代理的地址
       ]
     },
-    // redirect inbound available since 1.12.0-beta.20-vincent-auto
-    // 自 1.12.0-beta.20-vincent-auto 起，redirect 入站可用
     {
       "type": "redirect",
       "tag": "redirect-in",
@@ -50,8 +48,8 @@
     }
   ],
   "route": {
-    // The value of `auto_detect_interface` should be `false` since 1.12.0-beta.15-vincent-2, which does not affect tun interfaces
-    // 自 1.12.0-beta.15-vincent-2 起，`auto_detect_interface`的值应该设为`false`，不影响 tun 网卡
+    // The value of `auto_detect_interface` should be `false`, which does not affect tun interfaces
+    // `auto_detect_interface`的值应该设为`false`，不影响 tun 网卡
     "auto_detect_interface": false,
     "default_domain_resolver": {
       "server": "local-dns"
