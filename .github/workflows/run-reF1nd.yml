@@ -47,8 +47,7 @@ jobs:
         with:
           ref: hidden
 
-      - name: Check for new version
-        id: check
+      - name: Calculate latest version
         run: |
           LATEST_VERSION=$(curl -sSL https://api.github.com/repos/Sagernet/sing-box/releases/latest | jq -r '.tag_name' | sed 's|v||g')
           if [ "${LATEST_VERSION}" == "null" ]; then
@@ -59,22 +58,26 @@ jobs:
           echo "TAG_NAME=v${LATEST_VERSION}-vincent" >> $GITHUB_ENV
           echo "TAGS=with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_ccm,with_ocm,tfogo_checklinkname0" >> $GITHUB_ENV
           echo "VERSION=${LATEST_VERSION}" >> $GITHUB_ENV
+        shell: bash
 
-          if [ -f last_reF1nd_version ]; then
-            LAST_VERSION=$(cat last_reF1nd_version)
+      - name: Check for new version
+        id: check
+        run: |
+          if [ -f last_version ]; then
+            LAST_VERSION=$(cat last_version)
           else
             LAST_VERSION="none"
           fi
-          echo "Last version: ${LAST_VERSION}, current version: ${LATEST_VERSION}"
-          if [ "${LATEST_VERSION}" != "${LAST_VERSION}" ]; then
-            echo "${LATEST_VERSION}" > last_reF1nd_version
+          echo "Last version: ${LAST_VERSION}, current version: ${{ env.VERSION }}"
+          if [ "${{ env.VERSION }}" != "${LAST_VERSION}" ]; then
+            echo "${{ env.VERSION }}" > last_reF1nd_version
             echo "NEW=true" >> $GITHUB_ENV
             echo "NEW=true" >> $GITHUB_OUTPUT
           else
             echo "NEW=false" >> $GITHUB_ENV
             echo "NEW=false" >> $GITHUB_OUTPUT
           fi
-          echo "VERSION=${LATEST_VERSION}" >> $GITHUB_OUTPUT
+          echo "VERSION=${{ env.VERSION }}" >> $GITHUB_OUTPUT
         shell: bash
 
       - name: Download and extract source files
