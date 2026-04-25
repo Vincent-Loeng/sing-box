@@ -101,7 +101,7 @@ jobs:
           cp monitor_darwin.go monitor_freebsd.go
           cp monitor_darwin.go monitor_openbsd.go
 
-      - name: Setup Go
+      - name: Setup go
         if: github.event_name != 'schedule' || env.NEW == 'true'
         uses: actions/setup-go@v6
         with:
