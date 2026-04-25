@@ -83,8 +83,8 @@ jobs:
       - name: Download and extract source files
         if: github.event_name != 'schedule' || env.NEW == 'true'
         run: |
-          wget https://github.com/reF1nd/sing-box/archive/refs/tags/v${VERSION}-reF1nd.tar.gz -O sing-box-${VERSION}-reF1nd.tar.gz
-          tar -xf sing-box-${VERSION}-reF1nd.tar.gz && mv sing-box-${VERSION}-reF1nd sing-box
+          wget https://github.com/reF1nd/sing-box/archive/refs/tags/v${{ env.VERSION }}-reF1nd.tar.gz -O sing-box-${{ env.VERSION }}-reF1nd.tar.gz
+          tar -xf sing-box-${{ env.VERSION }}-reF1nd.tar.gz && mv sing-box-${{ env.VERSION }}-reF1nd sing-box
           cd sing-box
           SING_TUN_VERSION=$(cat go.mod | grep github.com/sagernet/sing-tun | awk '{ print $2 }' | sed 's|v||g')
           echo -e "\nreplace github.com/sagernet/sing-tun v${SING_TUN_VERSION} => ../sing-tun" >> go.mod
@@ -138,7 +138,7 @@ jobs:
         if: github.event_name != 'schedule' || env.NEW == 'true'
         run: |
           cd sing-box
-          go build -v -trimpath -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${RELEASE_NAME}' -s -w -buildid=" -tags ${TAGS} ./cmd/sing-box
+          go build -v -trimpath -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ env.RELEASE_NAME }}' -s -w -buildid=" -tags ${{ env.TAGS }} ./cmd/sing-box
           if [ "${{ matrix.goarch }}" == 'arm' ]; then
             mv sing-box bsd-box-reF1nd-${{ matrix.goos }}-${{ matrix.goarch }}v${{ matrix.goarm }}
           else
