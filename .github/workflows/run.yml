@@ -1,8 +1,8 @@
-name: Build
+name: Build reF1nd
 on:
   workflow_dispatch:
   schedule:
-    - cron: "00 23 * * *"
+    - cron: "00 11 * * *"
   push:
     branches:
       - master
@@ -70,7 +70,7 @@ jobs:
           fi
           echo "Last version: ${LAST_VERSION}, current version: ${{ env.VERSION }}"
           if [ "${{ env.VERSION }}" != "${LAST_VERSION}" ]; then
-            echo "${{ env.VERSION }}" > last_reF1nd_version
+            echo "${{ env.VERSION }}" > last_version
             echo "NEW=true" >> $GITHUB_ENV
             echo "NEW=true" >> $GITHUB_OUTPUT
           else
@@ -80,7 +80,7 @@ jobs:
           echo "VERSION=${{ env.VERSION }}" >> $GITHUB_OUTPUT
         shell: bash
 
-      - name: Download and extract source files
+      - name: Download and extract source tarball files
         if: github.event_name != 'schedule' || env.NEW == 'true'
         run: |
           wget https://github.com/Sagernet/sing-box/archive/refs/tags/v${{ env.VERSION }}.tar.gz -O sing-box-${{ env.VERSION }}.tar.gz
@@ -98,7 +98,7 @@ jobs:
         if: github.event_name != 'schedule' || env.NEW == 'true'
         run: |
           cd sing-box
-          patch -p1 < ../sing-box.patch
+          patch -p1 < ../sing-box-reF1nd.patch
           cd ../sing-tun
           patch -p1 < ../sing-tun.patch
           cp monitor_darwin.go monitor_freebsd.go
@@ -112,7 +112,7 @@ jobs:
 
       - name: Cache go dependencies
         if: github.event_name != 'schedule' || env.NEW == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/pkg/mod
@@ -134,15 +134,17 @@ jobs:
             ~/.cache/go-build
           key: go-${{ hashFiles('**/go.sum') }}-${{ matrix.goos }}-${{ matrix.goarch }}-${{ matrix.goarm }}
 
-      - name: Build binary file
+      - name: Build and compress binary file
         if: github.event_name != 'schedule' || env.NEW == 'true'
         run: |
           cd sing-box
           go build -v -trimpath -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ env.RELEASE_NAME }}' -s -w -buildid=" -tags ${{ env.TAGS }} ./cmd/sing-box
           if [ "${{ matrix.goarch }}" == 'arm' ]; then
             mv sing-box bsd-box-${{ matrix.goos }}-${{ matrix.goarch }}v${{ matrix.goarm }}
+            xz -v bsd-box-${{ matrix.goos }}-${{ matrix.goarch }}v${{ matrix.goarm }}
           else
             mv sing-box bsd-box-${{ matrix.goos }}-${{ matrix.goarch }}
+            xz -v bsd-box-${{ matrix.goos }}-${{ matrix.goarch }}
           fi
         env:
           GOOS: ${{ matrix.goos }}
@@ -150,17 +152,11 @@ jobs:
           GOARM: ${{ matrix.goarm }}
           CGO_ENABLED: 0
 
-      - name: Compress and move file to publish directory
+      - name: Move file to publish directory
         if: github.event_name != 'schedule' || env.NEW == 'true'
         run: |
-          cd sing-box
-          if [ "${{ matrix.goarch }}" == 'arm' ]; then
-            xz -v bsd-box-${{ matrix.goos }}-${{ matrix.goarch }}v${{ matrix.goarm }}
-          else
-            xz -v bsd-box-${{ matrix.goos }}-${{ matrix.goarch }}
-          fi
-          mkdir -p ../publish
-          cp -v bsd-box-* ../publish/
+          mkdir -p publish
+          cp -v sing-box/bsd-box-* publish/
 
       - name: Release and upload assets
         if: github.event_name != 'schedule' || env.NEW == 'true'
