@@ -1,4 +1,4 @@
-name: Build reF1nd
+name: Build
 on:
   workflow_dispatch:
   schedule:
@@ -98,7 +98,7 @@ jobs:
         if: github.event_name != 'schedule' || env.NEW == 'true'
         run: |
           cd sing-box
-          patch -p1 < ../sing-box-reF1nd.patch
+          patch -p1 < ../sing-box.patch
           cd ../sing-tun
           patch -p1 < ../sing-tun.patch
           cp monitor_darwin.go monitor_freebsd.go
