@@ -38,6 +38,7 @@ jobs:
           - { goos: openbsd, goarch: arm, goarm: 7 }
           - { goos: openbsd, goarch: arm64 }
           - { goos: openbsd, goarch: ppc64 }
+          - { goos: windows, goarch: amd64 }
     outputs:
       NEW: ${{ steps.check.outputs.NEW }}
       VERSION: ${{ steps.check.outputs.VERSION }}
