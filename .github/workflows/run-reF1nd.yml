@@ -149,6 +149,7 @@ jobs:
           if [ "${{ matrix.goos }}" == 'windows' ]; then
             mv sing-box.exe bsd-box-reF1nd-${{ matrix.goos }}-${{ matrix.goarch }}.exe
             zip -v bsd-box-reF1nd-${{ matrix.goos }}-${{ matrix.goarch }}.zip bsd-box-reF1nd-${{ matrix.goos }}-${{ matrix.goarch }}.exe
+            rm bsd-box-reF1nd-${{ matrix.goos }}-${{ matrix.goarch }}.exe
           elif [ "${{ matrix.goarch }}" == 'arm' ]; then
             mv sing-box bsd-box-reF1nd-${{ matrix.goos }}-${{ matrix.goarch }}v${{ matrix.goarm }}
             xz -v bsd-box-reF1nd-${{ matrix.goos }}-${{ matrix.goarch }}v${{ matrix.goarm }}
