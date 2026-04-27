@@ -58,7 +58,7 @@ jobs:
           echo "RELEASE_NAME=${LATEST_VERSION}-vincent" >> $GITHUB_ENV
           echo "TAG_NAME=v${LATEST_VERSION}-vincent" >> $GITHUB_ENV
           echo "TAGS=with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_ccm,with_ocm,tfogo_checklinkname0" >> $GITHUB_ENV
-          echo "WIN_TAGS=with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,tfogo_checklinkname0" >> $GITHUB_ENV
+          echo "WIN_TAGS=with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm" >> $GITHUB_ENV
           echo "VERSION=${LATEST_VERSION}" >> $GITHUB_ENV
           echo $GITHUB_ENV
         shell: bash
