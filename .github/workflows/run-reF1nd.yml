@@ -63,8 +63,8 @@ jobs:
       - name: Check for new version
         id: check
         run: |
-          if [ -f last_version ]; then
-            LAST_VERSION=$(cat last_version)
+          if [ -f last_reF1nd_version ]; then
+            LAST_VERSION=$(cat last_reF1nd_version)
           else
             LAST_VERSION="none"
           fi
