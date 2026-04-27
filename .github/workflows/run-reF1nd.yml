@@ -140,12 +140,12 @@ jobs:
         run: |
           cd sing-box
           go build -v -trimpath -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ env.RELEASE_NAME }}' -s -w -buildid=" -tags ${{ env.TAGS }} ./cmd/sing-box
-          if [ "${{ matrix.goarch }}" == 'arm' ]; then
-            mv sing-box bsd-box-reF1nd-${{ matrix.goos }}-${{ matrix.goarch }}v${{ matrix.goarm }}
-            xz -v bsd-box-reF1nd-${{ matrix.goos }}-${{ matrix.goarch }}v${{ matrix.goarm }}
-          else if [ "${{ matrix.goarch }}" == 'windows' ]; then
+          if [ "${{ matrix.goos }}" == 'windows' ]; then
             mv sing-box bsd-box-reF1nd-${{ matrix.goos }}-${{ matrix.goarch }}
             zip -v bsd-box-reF1nd-${{ matrix.goos }}-${{ matrix.goarch }}
+          else if [ "${{ matrix.goarch }}" == 'arm' ]; then
+            mv sing-box bsd-box-reF1nd-${{ matrix.goos }}-${{ matrix.goarch }}v${{ matrix.goarm }}
+            xz -v bsd-box-reF1nd-${{ matrix.goos }}-${{ matrix.goarch }}v${{ matrix.goarm }}
           else
             mv sing-box bsd-box-reF1nd-${{ matrix.goos }}-${{ matrix.goarch }}
             xz -v bsd-box-reF1nd-${{ matrix.goos }}-${{ matrix.goarch }}
