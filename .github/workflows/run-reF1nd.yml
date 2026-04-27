@@ -156,7 +156,7 @@ jobs:
         if: github.event_name != 'schedule' || env.NEW == 'true'
         run: |
           mkdir -p publish
-          cp -v bsd-box-* publish/
+          cp -v sing-box/bsd-box-* publish/
 
       - name: Release and upload assets
         if: github.event_name != 'schedule' || env.NEW == 'true'
